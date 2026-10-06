@@ -1,4 +1,4 @@
-# Photo gallery API contract
+# Photo album request contract
 
 The canonical origin is `https://photos.hackthehill.com`. The browser application has two user-facing routes: `/` for the album and `/restore?case=<caseId>&version=<n>` for the minimal restore confirmation. Requests use only `/` and `/restore`. An `action` query parameter selects a JSON or image operation; requests without it serve the page. Static assets retain their normal relative paths.
 
@@ -82,7 +82,7 @@ The explanation is trimmed and limited to 2,000 characters. A valid request atom
 
 Cloudflare Access protects `photos.hackthehill.com/restore` and its descendants, with the dedicated CTN-only Google Workspace application, its configured audience (`ACCESS_AUD`), and a 30-minute session. The Worker requires a cryptographically verified Access JWT with the configured issuer (`ACCESS_TEAM`), audience, expiry, subject, and an `@ctn-rtc.org` email. It does not trust an email header and does not grant organiser privileges to an attendee OTP session. The application has no organiser dashboard, sign-in page, case interface, or rights lookup page.
 
-Removal notifications contain the photo and the request explanations snapshot needed for the decision. Their single button targets the Access-protected user route `/restore?case=<caseId>&version=<n>`. The shared gallery component shows only the small filename and an explicit Restore button. The page calls the internal API after Access verification; GET never mutates state.
+Removal notifications contain the photo and the request explanations snapshot needed for the decision. Their single button targets the Access-protected user route `/restore?case=<caseId>&version=<n>`. The shared album component shows only the small filename and an explicit Restore button. The page calls the internal API after Access verification; GET never mutates state.
 
 ### `GET /restore?action=case&case=<caseId>`
 
