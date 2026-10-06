@@ -969,8 +969,10 @@ it("serves only approved public previews and respects removal even with a matchi
 	const url = `https://gallery.test/?action=highlight&photo=${id}`;
 	const response = await SELF.fetch(url);
 	expect(response.status).toBe(200);
-	expect(response.headers.get("cache-control")).toBe("no-store");
+	expect(response.headers.get("cache-control")).toBe("no-cache");
 	expect([...new Uint8Array(await response.arrayBuffer())]).toEqual([1, 2, 3, 4]);
+	const revalidated = await SELF.fetch(url, { headers: { "If-None-Match": response.headers.get("etag")! } });
+	expect(revalidated.status).toBe(304);
 	expect((await SELF.fetch("https://gallery.test/?action=highlight&photo=photo-1")).status).toBe(404);
 	expect((await SELF.fetch(`https://gallery.test/?action=preview&photo=${id}`)).status).toBe(401);
 	expect((await SELF.fetch(`https://gallery.test/?action=download&photo=${id}&format=full`)).status).toBe(401);

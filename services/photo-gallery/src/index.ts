@@ -507,7 +507,7 @@ async function imageResponse(
 	const headers = new Headers({
 		...securityHeaders,
 		"Content-Type": row.contentType || "image/jpeg",
-		"Cache-Control": publicHighlight ? "no-store" : "private, max-age=60, must-revalidate",
+		"Cache-Control": publicHighlight ? "no-cache" : "private, max-age=60, must-revalidate",
 	});
 	if (row.sha256) headers.set("ETag", `"${row.sha256}"`);
 	// Publication was checked above; a matching ETag needs no R2 read.
