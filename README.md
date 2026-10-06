@@ -45,7 +45,7 @@ Deployment builds the application and publishes it with the Worker. CI verifies 
 | `public/`                 | Logo and fonts                                                      |
 | `docs/`                   | Operations and request contracts                                    |
 
-The app uses Astro and React, Cloudflare Workers with private R2 and D1, and AWS SES for email. Pages and application requests use `/` and `/restore`; an `action` query parameter selects each operation. Assets and browser requests use relative URLs.
+The app uses Astro and React, Cloudflare Workers with private R2 and D1, and AWS SES for email. Pages and application requests use `/` and `/restore`; an `action` query parameter selects each operation. Assets and browser requests use root-relative paths on the same origin, such as `/fonts/…` and `/?action=album`.
 
 The main event website uses eight approved R2 previews through `/?action=highlight&photo=<id>`. The allowlist is in `services/photo-gallery/src/public-highlights.ts`; hiding a photo also stops serving its public preview. Full-size downloads still require sign-in and licence acknowledgement.
 

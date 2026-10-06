@@ -80,7 +80,7 @@ Requires an active session and CSRF token.
 { "explanation": "Please hide this image because…", "requestId": "uuid" }
 ```
 
-The explanation is trimmed and limited to 2,000 characters. A valid request atomically creates a pending case, quarantines the photo, and queues the moderator notification; it returns `202 { "caseId": string }`. An idempotent retry with the same account, photo, and request ID returns the existing case without consuming another quota slot. New reports are limited to 30 per account per hour and 5 per account for the same photo per hour. A rejected request cannot quarantine another photo or enqueue a notification.
+The explanation is trimmed and limited to 2,000 characters. Only a published photo accepts a new request; a photo that is already hidden or withdrawn returns `404`. A valid request atomically creates a pending case, quarantines the photo, and queues the moderator notification; it returns `202 { "caseId": string }`. An idempotent retry with the same account, photo, and request ID returns the existing case without consuming another quota slot. New reports are limited to 30 per account per hour and 5 per account for the same photo per hour. A rejected request cannot quarantine another photo or enqueue a notification.
 
 ## Organiser restore endpoint
 
@@ -97,12 +97,12 @@ Returns the authenticated restore state:
 	"filename": "IMG_1234.jpg",
 	"canRestore": true,
 	"photoVersion": 3,
-	"status": "quarantined",
+	"status": "pending",
 	"csrfToken": "opaque-token"
 }
 ```
 
-The response is case-scoped and read-only. A supplied email-link `version` is checked against the current photo version; a stale link is rejected. `canRestore` is false when the photo is no longer eligible for this action or another pending case prevents an atomic restore.
+The response is case-scoped and read-only. `version` is required; a missing or malformed value returns `400`. `status` is the removal request's status (`pending` or `dismissed`), not the photo's. `canRestore` is true only when the request is pending, the photo is quarantined, and `version` matches the current photo version; a stale link returns `200` with `canRestore: false`.
 
 ### `POST /restore?action=case&case=<caseId>`
 
@@ -112,7 +112,7 @@ Requires the verified Access session, the returned CSRF token, same-origin reque
 { "expectedVersion": 3 }
 ```
 
-The Worker compare-and-set checks the email-link version and `expectedVersion`, rejects stale links and other pending cases, then atomically dismisses all pending requests in the case and publishes the photo. It writes the fixed restore audit reason together with the verified Access identity. Replays or mismatched versions do not publish a photo. The operation is the only restore action exposed to the organiser.
+The Worker compare-and-sets on `expectedVersion` (the page sends the email-link version) and returns `409` if the request is no longer pending or the photo version has changed. It then atomically publishes the photo and dismisses every pending removal request for that photo, so a duplicate request cannot keep the photo hidden. It writes the fixed restore audit reason together with the verified Access identity. Replays or mismatched versions do not publish a photo. The operation is the only restore action exposed to the organiser.
 
 Individual download request records remain available for 90 days for manual, owner-only rights follow-up in the database. There is no rights lookup page or bulk export in this service.
 
