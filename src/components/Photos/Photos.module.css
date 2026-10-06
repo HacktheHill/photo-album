@@ -37,8 +37,7 @@
 	color: #fff9ef;
 	text-decoration: none;
 }
-.language,
-.textButton {
+.language {
 	padding: 0.25rem 0;
 	border: 0;
 	color: #f8cc8d;
@@ -47,12 +46,24 @@
 	text-decoration: underline;
 	text-underline-offset: 0.2em;
 }
-.language:hover,
-.textButton:hover {
+.language:hover {
 	color: #fff9ef;
 }
-.footer a {
-	color: inherit;
+.textButton {
+	padding: 0.25rem 0;
+	border: 0;
+	color: var(--color-ink);
+	background: transparent;
+	font-size: 0.86rem;
+	text-decoration: underline;
+	text-underline-offset: 0.2em;
+}
+.textButton:hover:not(:disabled) {
+	color: var(--color-accent);
+}
+.textButton:disabled {
+	color: var(--color-muted);
+	text-decoration: none;
 }
 .centerState {
 	display: grid;
@@ -130,7 +141,7 @@
 .search input {
 	width: 100%;
 	padding: 0.85rem 0.95rem;
-	border: 1px solid #c7d0df;
+	border: 1px solid var(--color-control-border);
 	border-radius: 0.5rem;
 	color: var(--color-ink);
 	background: #fff;
@@ -139,7 +150,7 @@
 .dialog textarea:focus,
 .search input:focus {
 	border-color: var(--color-accent);
-	outline: 2px solid var(--color-peach);
+	outline: 2px solid var(--color-accent);
 	outline-offset: 1px;
 }
 .codeInput {
@@ -172,7 +183,7 @@
 	transform: translateY(-1px);
 }
 .outlineButton {
-	border: 1px solid #f8cc8d;
+	border: 1px solid var(--color-control-border);
 	color: var(--color-ink);
 	background: transparent;
 }
@@ -182,7 +193,13 @@
 }
 button:disabled {
 	cursor: not-allowed;
-	opacity: 0.52;
+	opacity: 1;
+}
+.button:disabled,
+.outlineButton:disabled {
+	color: var(--color-disabled-text);
+	border-color: var(--color-control-border);
+	background: var(--color-disabled-surface);
 }
 .muted,
 .privacy,
@@ -315,7 +332,7 @@ button:disabled {
 .categoryNav button {
 	flex: none;
 	padding: 0.6rem 0.8rem;
-	border: 1px solid #d6d9de;
+	border: 1px solid var(--color-control-border);
 	border-radius: 99px;
 	color: var(--color-muted);
 	background: #fff;
@@ -324,7 +341,7 @@ button:disabled {
 }
 .categoryNav button span {
 	margin-left: 0.3rem;
-	color: #9aa7bb;
+	color: var(--color-muted);
 }
 .categoryNav .activeTab {
 	border-color: var(--color-ink);
@@ -340,7 +357,7 @@ button:disabled {
 	gap: 0.45rem;
 	max-width: 24rem;
 	padding: 0 0.8rem;
-	border: 1px solid #d6d9de;
+	border: 1px solid var(--color-control-border);
 	border-radius: 0.5rem;
 	color: var(--color-muted);
 	background: #fff;
@@ -435,9 +452,11 @@ button:disabled {
 }
 .favourite,
 .favouriteLarge {
+	min-width: var(--control-height);
+	min-height: var(--control-height);
 	flex: none;
 	border: 0;
-	color: #f8cc8d;
+	color: var(--color-muted);
 	background: transparent;
 	font-size: 1.25rem;
 }
@@ -484,6 +503,8 @@ button:disabled {
 }
 .iconButton,
 .dialogClose {
+	min-width: var(--control-height);
+	min-height: var(--control-height);
 	border: 0;
 	color: inherit;
 	background: transparent;
@@ -738,11 +759,17 @@ button:disabled {
 
 .topbar button:focus-visible,
 .topbar a:focus-visible,
+.albumHero button:focus-visible,
 .viewer button:focus-visible {
 	outline-color: var(--color-peach);
 }
-.albumHero .textButton:hover {
-	color: var(--color-accent-hover);
+.albumHero .textButton,
+.viewer .textButton {
+	color: var(--color-peach);
+}
+.albumHero .textButton:hover:not(:disabled),
+.viewer .textButton:hover:not(:disabled) {
+	color: var(--color-cream);
 }
 
 .albumHero .eyebrow {
@@ -765,6 +792,24 @@ button:disabled {
 .viewer .eyebrow,
 .viewer .outlineButton {
 	color: var(--color-cream);
+}
+.viewer .outlineButton,
+.viewer .button {
+	border-color: var(--color-peach);
+}
+.viewer .outlineButton:hover:not(:disabled) {
+	color: #fff;
+	border-color: #fff;
+}
+.viewer .outlineButton:disabled {
+	color: var(--color-disabled-text);
+	border-color: var(--color-control-border);
+}
+.authCard input::placeholder,
+.dialog textarea::placeholder,
+.search input::placeholder {
+	color: var(--color-muted);
+	opacity: 1;
 }
 .cardMeta span:last-child {
 	white-space: normal;
