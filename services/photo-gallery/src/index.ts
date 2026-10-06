@@ -262,7 +262,7 @@ async function sendSes(env: Env, to: string[], subject: string, text: string, ht
 	const body = new URLSearchParams({
 		Action: "SendEmail",
 		Version: "2010-12-01",
-		Source: env.SES_FROM_EMAIL,
+		Source: `Hack the Hill <${env.SES_FROM_EMAIL}>`,
 		"Message.Subject.Data": subject,
 		"Message.Subject.Charset": "UTF-8",
 		"Message.Body.Text.Data": text,
