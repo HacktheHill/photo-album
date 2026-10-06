@@ -3,7 +3,7 @@ import { defineConfig } from "astro/config";
 
 // Translate only a verified local same-origin request. Keep cross-site origins
 // unchanged so the Worker rejects them; preserve Sec-Fetch-Site as well.
-const apiProxy = {
+const actionProxy = {
 	target: "http://127.0.0.1:8787",
 	changeOrigin: true,
 	configure(proxy) {
@@ -19,5 +19,5 @@ export default defineConfig({
 	outDir: "build",
 	site: "https://photos.hackthehill.com",
 	integrations: [react()],
-	vite: { server: { proxy: { "/api": apiProxy } } },
+	vite: { server: { proxy: { "^/(?:restore/?)?\\?action=": actionProxy } } },
 });

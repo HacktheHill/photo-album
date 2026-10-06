@@ -8,9 +8,9 @@ The gallery is independent of the main Hack the Hill website. Astro builds the b
 
 - `/` — attendee album and email-code sign-in.
 - `/restore?case=<caseId>&version=<n>` — minimal, Access-protected restore confirmation reached from a removal notification.
-- `/api/*` — authentication, album manifest, licence, aggregate events, authenticated media, downloads, removal reports, protected restore links, and restricted owner follow-up.
+- Query-selected operations on `/` handle login, album, licence, events, photo viewing/downloads and removal reports; `/restore` handles protected case reads and restoration.
 
-The first standalone release uses these two browser routes and the internal `/api/*` prefix.
+These are also the only application request paths; `action` query parameters select operations.
 
 ## Repository layout
 
@@ -52,7 +52,7 @@ Run the Astro application at `http://localhost:4321` with:
 npm run dev
 ```
 
-During local development, `astro.config.mjs` proxies `/api` to the local Worker at `http://127.0.0.1:8787`. It translates only a verified same-origin development request; cross-site requests remain unchanged so the Worker can reject them. In a second terminal, run the Worker with:
+During local development, `astro.config.mjs` proxies requests with an `action` query parameter to the local Worker at `http://127.0.0.1:8787`. It translates only a verified same-origin development request; cross-site requests remain unchanged so the Worker can reject them. In a second terminal, run the Worker with:
 
 ```sh
 npm run worker:dev

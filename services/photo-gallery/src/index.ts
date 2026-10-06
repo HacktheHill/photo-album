@@ -454,13 +454,13 @@ async function album(env: Env): Promise<Response> {
 				width: row.width,
 				height: row.height,
 				thumbnail: {
-					url: `/api/photos/${row.id}/thumbnail`,
+					url: `/?action=thumbnail&photo=${row.id}`,
 					width: row.thumbnailWidth,
 					height: row.thumbnailHeight,
 					bytes: row.thumbnailBytes,
 				},
 				preview: {
-					url: `/api/photos/${row.id}/preview`,
+					url: `/?action=preview&photo=${row.id}`,
 					width: row.previewWidth,
 					height: row.previewHeight,
 					bytes: row.previewBytes,
@@ -871,8 +871,13 @@ async function restoreCaseAction(
 async function handle(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
 	const url = new URL(request.url);
 	if (request.method === "OPTIONS") return error("Method not allowed.", 405);
+	const action = url.searchParams.get("action");
+	const root = url.pathname === "/";
+	const restoreRoute = url.pathname === "/restore" || url.pathname === "/restore/";
+	if ((root || restoreRoute) && !action && request.method === "GET") return env.ASSETS.fetch(request);
+	if (!root && !restoreRoute) return error("Not found.", 404);
 
-	if (url.pathname === "/api/auth/session" && request.method === "GET") {
+	if (root && action === "session" && request.method === "GET") {
 		const session = await sessionForRequest(request, env);
 		if (!session) return json({ authenticated: false });
 		return json({
@@ -884,7 +889,7 @@ async function handle(request: Request, env: Env, ctx: ExecutionContext): Promis
 			expiresAt: session.expiresAt,
 		});
 	}
-	if (url.pathname === "/api/auth/request" && request.method === "POST") {
+	if (root && action === "request-code" && request.method === "POST") {
 		if (!sameOrigin(request, url)) return error("Same-origin request required.", 403);
 		try {
 			const body = await boundedJson(request);
@@ -957,7 +962,7 @@ async function handle(request: Request, env: Env, ctx: ExecutionContext): Promis
 			return error("The request could not be completed.", 500);
 		}
 	}
-	if (url.pathname === "/api/auth/verify" && request.method === "POST") {
+	if (root && action === "verify-code" && request.method === "POST") {
 		if (!sameOrigin(request, url)) return error("Same-origin request required.", 403);
 		try {
 			const body = await boundedJson(request);
@@ -1024,7 +1029,7 @@ async function handle(request: Request, env: Env, ctx: ExecutionContext): Promis
 			return error("The request could not be completed.", 500);
 		}
 	}
-	if (url.pathname === "/api/auth/logout" && request.method === "POST") {
+	if (root && action === "logout" && request.method === "POST") {
 		const session = await sessionForRequest(request, env);
 		if (session) {
 			if (!sameOrigin(request, url) || !(await requireCsrf(request, env, session)))
@@ -1035,11 +1040,11 @@ async function handle(request: Request, env: Env, ctx: ExecutionContext): Promis
 		}
 		return json({ accepted: true }, 200, { "Set-Cookie": clearCookie() });
 	}
-	if (url.pathname === "/api/album" && request.method === "GET") {
+	if (root && action === "album" && request.method === "GET") {
 		if (!(await attendeeSession(request, env))) return error("Authentication required.", 401);
 		return album(env);
 	}
-	if (url.pathname === "/api/licence/acknowledge" && request.method === "POST") {
+	if (root && action === "licence" && request.method === "POST") {
 		const session = await sessionForRequest(request, env);
 		if (!session) return error("Authentication required.", 401);
 		if (!(await requireCsrf(request, env, session))) return error("Invalid CSRF token.", 403);
@@ -1051,14 +1056,19 @@ async function handle(request: Request, env: Env, ctx: ExecutionContext): Promis
 			.run();
 		return json({ version: current });
 	}
-	if (url.pathname === "/api/events" && request.method === "POST") return events(request, env);
-	if (/^\/api\/photos\/[^/]+\/removal-requests$/.test(url.pathname) && request.method === "POST") {
-		const id = url.pathname.split("/")[3];
+	if (root && action === "events" && request.method === "POST") return events(request, env);
+	const id = url.searchParams.get("photo") ?? "";
+	if (root && action === "remove" && request.method === "POST") {
 		if (!photoId(id)) return error("Not found.", 404);
 		return removal(request, env, id, ctx);
 	}
-	const restoreMatch = url.pathname.match(/^\/api\/restore\/([A-Za-z0-9_-]{1,128})$/);
-	if (restoreMatch && (request.method === "GET" || request.method === "POST")) {
+	const caseId = url.searchParams.get("case") ?? "";
+	if (
+		restoreRoute &&
+		action === "case" &&
+		ID_RE.test(caseId) &&
+		(request.method === "GET" || request.method === "POST")
+	) {
 		let identity: AccessIdentity;
 		try {
 			identity = await accessIdentity(request, env);
@@ -1067,21 +1077,16 @@ async function handle(request: Request, env: Env, ctx: ExecutionContext): Promis
 				return error("Administrator authentication required.", 403);
 			throw caught;
 		}
-		const caseId = restoreMatch[1];
 		return request.method === "GET"
 			? restoreCase(request, env, identity, caseId)
 			: restoreCaseAction(request, env, identity, caseId);
 	}
-	if (/^\/api\/photos\/[^/]+\/download$/.test(url.pathname) && request.method === "GET") {
-		const id = url.pathname.split("/")[3];
-		return id && photoId(id) ? downloadResponse(request, env, id) : error("Not found.", 404);
+	if (root && action === "download" && request.method === "GET") {
+		return photoId(id) ? downloadResponse(request, env, id) : error("Not found.", 404);
 	}
-	const mediaMatch = url.pathname.match(/^\/api\/photos\/([A-Za-z0-9_-]{1,128})\/(thumbnail|preview)$/);
-	if (mediaMatch && request.method === "GET") {
-		const id = mediaMatch[1];
-		const format = mediaMatch[2] as "thumbnail" | "preview";
+	if (root && (action === "thumbnail" || action === "preview") && photoId(id) && request.method === "GET") {
 		if (!(await attendeeSession(request, env))) return error("Authentication required.", 401);
-		return imageResponse(request, env, id, format);
+		return imageResponse(request, env, id, action);
 	}
 	return error("Not found.", 404);
 }

@@ -106,7 +106,7 @@ export default function Restore({ caseId, version }: { caseId: string; version: 
 		setNotice(null);
 		try {
 			const response = await fetch(
-				`/api/restore/${encodeURIComponent(caseId)}?version=${encodeURIComponent(String(version))}`,
+				`/restore?action=case&case=${encodeURIComponent(caseId)}&version=${encodeURIComponent(String(version))}`,
 				{
 					credentials: "same-origin",
 					headers: { Accept: "application/json" },
@@ -148,7 +148,7 @@ export default function Restore({ caseId, version }: { caseId: string; version: 
 		setNotice(null);
 		try {
 			const response = await fetch(
-				`/api/restore/${encodeURIComponent(caseId)}?version=${encodeURIComponent(String(version))}`,
+				`/restore?action=case&case=${encodeURIComponent(caseId)}&version=${encodeURIComponent(String(version))}`,
 				{
 					method: "POST",
 					credentials: "same-origin",

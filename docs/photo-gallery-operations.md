@@ -1,8 +1,8 @@
 # Photo gallery operations and release runbook
 
-This repository is the standalone attendee gallery at `https://photos.hackthehill.com`. The root Astro application and the Cloudflare Worker are deployed together as one Worker Static Assets deployment on that subdomain. The Worker serves the built Astro assets and runs every protected API, media, download, and restore operation under the single internal `/api/*` prefix on the same origin. The two user-facing routes are `/` for the album and `/restore?case=<caseId>&version=<n>` for the minimal restore confirmation.
+This repository is the standalone attendee gallery at `https://photos.hackthehill.com`. The root Astro application and the Cloudflare Worker are deployed together as one Worker Static Assets deployment on that subdomain. The Worker serves the built Astro assets and runs every protected API, media, download, and restore operation through query-selected operations on `/` and `/restore`. The two user-facing routes are `/` for the album and `/restore?case=<caseId>&version=<n>` for the minimal restore confirmation.
 
-The main Hack the Hill website is outside this repository and is not modified by this service. The first standalone release uses `/`, `/restore`, and the internal `/api/*` prefix on this host.
+The main Hack the Hill website is outside this repository and is not modified by this service. The service uses only `/` and `/restore` for pages and application requests.
 
 D1 stores keyed eligibility records, sessions, publication state, removal cases, moderation audit, aggregate activity, restricted download-request records, and the notification outbox. Private R2 stores the prepared photo variants. The browser receives neither the roster nor R2 object keys.
 
@@ -10,17 +10,17 @@ D1 stores keyed eligibility records, sessions, publication state, removal cases,
 
 The staging collection has 358 approved edited photos in 18 categories and 1,432 verified R2 objects. Staging asset verification is complete. The production R2 bucket has been created as `hack-the-hill-photo-gallery`, and the production D1 database has been created with ID `1b13a732-a526-4a53-b691-d74625919c8f`.
 
-Production is not considered live until every release gate in this runbook has evidence. In particular, the production D1 binding, dedicated Cloudflare Access application, SES configuration, reviewed real-team eligibility source, backup/restore drill, budget monitoring, and real pilot remain owner-controlled work. Do not describe bucket or database creation as a production launch, attendee access, or delivered email.
+Production is deployed at photos.hackthehill.com with 358 photos, 18 categories, and 1,432 SHA-256-verified R2 objects. Live verification checked every thumbnail and preview (716 objects), licence enforcement and representative full/quick downloads. The recipient confirmed code receipt and completed production sign-in. Backup recovery, budget monitoring and a live removal/restoration pilot remain operational checks; do not represent configuration or unit tests as proof of that live moderation pilot.
 
 The owner of the service is responsible for approving the asset manifest, production bindings, eligibility source, licence version, moderation policy, backup evidence, and final pilot. The privacy/rights mailbox is `privacy@ctn-rtc.org`; configuring a recipient variable does not prove that SES is usable or that a message was delivered.
 
 ## Organiser authentication
 
-Create a dedicated Cloudflare Access application for `photos.hackthehill.com/restore` and its descendants, plus `photos.hackthehill.com/api/restore` and its descendants. Use the approved Google Workspace identity configuration and an Allow policy restricted to `@ctn-rtc.org`. The final Access issuer and audience must be copied into the production Worker variables `ACCESS_TEAM` and `ACCESS_AUD` after the application is reviewed. Do not reuse the metrics application audience or silently broaden its policy. The application uses its own one-hour session and preserves the aggregate album metrics audience separately. Do not protect the whole root album with this application.
+Create a dedicated Cloudflare Access application for `photos.hackthehill.com/restore` and its descendants. Use the approved Google Workspace identity configuration and an Allow policy restricted to `@ctn-rtc.org`. The final Access issuer and audience must be copied into the production Worker variables `ACCESS_TEAM` and `ACCESS_AUD` after the application is reviewed. Do not reuse the metrics application audience or silently broaden its policy. The application uses its own 30-minute session and preserves the aggregate album metrics audience separately. Do not protect the whole root album with this application.
 
-The Worker verifies the Access JWT signature, issuer, audience, expiry, subject, and email domain on every organiser request. It accepts the signed assertion header or the platform's `CF_Authorization` cookie; it does not trust a user-supplied email header. Access sessions are limited to one hour by the application and Worker CSRF session. Attendee OTP sessions do not grant organiser privileges.
+The Worker verifies the Access JWT signature, issuer, audience, expiry, subject, and email domain on every organiser request. It accepts the signed assertion header or the platform's `CF_Authorization` cookie; it does not trust a user-supplied email header. Access sessions are limited to 30 minutes by the application; Worker CSRF tokens are bound to the authenticated Access session. Attendee OTP sessions do not grant organiser privileges.
 
-Google-only Access configuration and the real production team eligibility source are still pending. Do not import real eligibility or enable the `/restore` route until both have been reviewed.
+The production Access application is `a5802520-d237-46f1-9ccd-cd20659a124c`, using the existing Only CTN Emails policy and Google Workspace only. Its dedicated audience is configured in the production Worker. Anonymous restoration requests redirect to Access; attendee login does not grant restoration rights.
 
 `MODERATOR_EMAILS=privacy@ctn-rtc.org` identifies the intended privacy/rights mailbox; it does not grant organiser access or send mail to every CTN account.
 
@@ -30,7 +30,7 @@ The approved collection contains 358 edited photos across 18 event categories. T
 
 Run the pipeline and uploader described in `scripts/photos/`. Keep output, checkpoints, eligibility exports, credentials, manifests, SQL, and verification reports outside Git. Use the manifest to seed D1; do not manually reconstruct IDs from basenames because categories can contain duplicate filenames. Only published photos are returned to attendees. Media routes check current publication state on every request.
 
-Eligibility is an owner-controlled, private import. Use the reviewed real-team eligibility source selected for this standalone service; an RSVP alone is not an attendance decision. Do not copy application answers into the gallery, commit the source, or expose the roster to browsers. The current real-team source is still pending and must be reviewed before production import.
+Eligibility is an owner-controlled, private import. Use the reviewed real-team eligibility source selected for this standalone service; an RSVP alone is not an attendance decision. Do not copy application answers into the gallery, commit the source, or expose the roster to browsers. The approved source is applicants marked Attended plus every email in the CTN Members sheet. The verified import contains 331 unique eligible emails: 298 attendees and 33 members, with no overlap. One attended row had no usable email.
 
 ## Resources and deployment model
 
@@ -53,25 +53,25 @@ Planned production values and status:
 | Custom domain         | `photos.hackthehill.com`                                                           |
 | Private R2 bucket     | `hack-the-hill-photo-gallery` (created; release verification pending)              |
 | D1 database           | ID `1b13a732-a526-4a53-b691-d74625919c8f` (created; binding/configuration pending) |
-| Access application    | dedicated production application pending                                           |
-| SES                   | configuration and delivery pilot pending                                           |
-| Real-team eligibility | reviewed source and import pending                                                 |
+| Access application    | CTN-only Google Workspace application configured                                   |
+| SES                   | configured; login email receipt confirmed                                          |
+| Real-team eligibility | 331 reviewed eligible accounts imported and verified                               |
 
 The R2 bucket's public access must remain disabled. Production resources and routes are separate from staging. Never deploy with placeholder bindings, staging IDs, unreviewed eligibility, an empty Access audience, or an unprotected restore API.
 
-The root `npm run build` writes `build/`. The Worker configuration binds that directory as Static Assets and runs the Worker first for `/api/*`. Static pages and protected service routes therefore share one origin. Website Pages deployment is not part of this project.
+The root `npm run build` writes `build/`. The Worker configuration binds that directory as Static Assets and runs the Worker first for `/`, `/restore` and `/restore/`. Static pages and protected service routes therefore share one origin. Website Pages deployment is not part of this project.
 
 ## Configuration and secrets
 
-Set `APP_ORIGIN=https://photos.hackthehill.com` only in the reviewed production Worker configuration so removal notification buttons can point to the protected relative `/restore?case=<caseId>&version=<n>` route. Browser assets and `/api` requests remain relative. Set `CURRENT_LICENCE_VERSION` to the exact `LICENCE_VERSION` in `src/shared/photos.ts` and the current D1 licence row. The bilingual text comes from `src/shared/photo-licence.json`.
+Set `APP_ORIGIN=https://photos.hackthehill.com` only in the reviewed production Worker configuration so removal notification buttons can point to the protected relative `/restore?case=<caseId>&version=<n>` route. Browser assets and application requests remain relative. Set `CURRENT_LICENCE_VERSION` to the exact `LICENCE_VERSION` in `src/shared/photos.ts` and the current D1 licence row. The bilingual text comes from `src/shared/photo-licence.json`.
 
-The intended sender is `info@hackthehill.com` and removal notifications go to `privacy@ctn-rtc.org`. SES configuration is still pending. Use dedicated, least-privilege credentials in the protected deployment secret store; never commit them, put them in command arguments, or print them in verification logs. Required secret names are `OTP_HMAC_SECRET`, `SESSION_HMAC_SECRET`, `AWS_ACCESS_KEY_ID`, and `AWS_SECRET_ACCESS_KEY`. Non-secret variables include `SES_REGION`, `SES_FROM_EMAIL`, `MODERATOR_EMAILS`, `APP_ORIGIN`, `ACCESS_TEAM`, and `ACCESS_AUD`.
+The sender is `Hack the Hill <info@ctn-rtc.org>` and removal notifications go to `privacy@ctn-rtc.org`. Both sender identities are verified and domain DKIM succeeds. The dedicated IAM user can only send email from this address through its existing configuration set. Production login emails were accepted by SES, the recipient confirmed receipt, and a real code was successfully verified. Use dedicated, least-privilege credentials in the protected deployment secret store; never commit them, put them in command arguments, or print them in verification logs. Required secret names are `OTP_HMAC_SECRET`, `SESSION_HMAC_SECRET`, `AWS_ACCESS_KEY_ID`, and `AWS_SECRET_ACCESS_KEY`. Non-secret variables include `SES_REGION`, `SES_FROM_EMAIL`, `MODERATOR_EMAILS`, `APP_ORIGIN`, `ACCESS_TEAM`, and `ACCESS_AUD`.
 
 The service leaves the outbox pending when SES is incomplete. A configured sender or provider acceptance is not evidence of inbox delivery or human readership. The real pilot must verify the expected code path with authorised recipients and record delivery evidence without committing personal message data.
 
 ## Backup, restore, and release gates
 
-Before production, complete and record all of the following:
+For release and ongoing operations, maintain evidence for the following checks:
 
 1. Run root formatting, lint, type checks, Worker tests, owner-tool tests, pipeline tests, and browser tests from a clean review state.
 2. Apply all reviewed D1 migrations to staging and verify the migration version. Do not use production bindings for local development.

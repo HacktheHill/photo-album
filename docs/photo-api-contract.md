@@ -1,16 +1,16 @@
 # Photo gallery API contract
 
-The canonical origin is `https://photos.hackthehill.com`. The browser application has two user-facing routes: `/` for the album and `/restore?case=<caseId>&version=<n>` for the minimal restore confirmation. Every protected API, media, download, and restore operation is under the single internal Worker prefix `/api`.
+The canonical origin is `https://photos.hackthehill.com`. The browser application has two user-facing routes: `/` for the album and `/restore?case=<caseId>&version=<n>` for the minimal restore confirmation. Requests use only `/` and `/restore`. An `action` query parameter selects a JSON or image operation; requests without it serve the page. Static assets retain their normal relative paths.
 
 Responses are JSON unless the endpoint returns an image or download stream. JSON errors have the shape `{ "error": string }` and an HTTP status. Protected JSON and download responses use `Cache-Control: private, no-store`; published attendee media may use the short private revalidation policy returned by the Worker. Client mutation requests send JSON and `X-CSRF-Token` where a session exists. Authentication-code request and verification instead require a same-origin request before a session exists.
 
 ## Attendee endpoints
 
-### `GET /api/auth/session`
+### `GET /?action=session`
 
 Returns `{ authenticated: false }` for an anonymous browser. An active attendee session returns `PhotoSession`, including a session-scoped CSRF token, opaque account identifier, current acknowledged licence version, and expiry. The response never returns eligibility data.
 
-### `POST /api/auth/request`
+### `POST /?action=request-code`
 
 Request body:
 
@@ -20,7 +20,7 @@ Request body:
 
 The response is `202 { "accepted": true }` for both eligible and unknown addresses so that eligibility cannot be enumerated. A valid request creates an eight-digit code challenge and queues delivery; the code is never returned in the API response. Rate limits return a generic error without revealing whether an address is eligible. `language` is `en` or `fr`; all other values use English.
 
-### `POST /api/auth/verify`
+### `POST /?action=verify-code`
 
 Request body:
 
@@ -30,15 +30,15 @@ Request body:
 
 Successful verification returns an authenticated `PhotoSession` and an `HttpOnly`, `Secure`, `SameSite=Strict` session cookie. Codes expire after ten minutes, are single-use, and allow at most five failed attempts. Invalid, expired, unknown, and already-consumed codes use the same error shape.
 
-### `POST /api/auth/logout`
+### `POST /?action=logout`
 
 Accepts `{}`. When a session exists, the request must be same-origin and include its CSRF token. The session is revoked and the cookie is cleared. An anonymous logout still returns an accepted response.
 
-### `GET /api/album`
+### `GET /?action=album`
 
 Requires an active attendee session. Returns an `AlbumManifest` containing the current licence version and only published photos. Each photo includes its opaque ID, event category, filename, dimensions, thumbnail and preview media URLs, and full/quick download metadata. The manifest does not include R2 object keys, eligibility records, source paths, moderation notes, requester identities, or hidden photos.
 
-### `POST /api/licence/acknowledge`
+### `POST /?action=licence`
 
 Requires an active session and CSRF token.
 
@@ -48,7 +48,7 @@ Requires an active session and CSRF token.
 
 The version must match the current D1 licence row and Worker configuration. A successful request returns `{ "version": string }`. Downloads are blocked with `428` until the current version has been acknowledged.
 
-### `POST /api/events`
+### `POST /?action=events`
 
 Requires an active session and CSRF token.
 
@@ -58,17 +58,17 @@ Requires an active session and CSRF token.
 
 The Worker deduplicates photo opens per session and records only daily aggregate counts. `albumVisit` increments an aggregate album-visit counter. No identity-linked browsing history is created.
 
-### `GET /api/photos/<id>/thumbnail` and `GET /api/photos/<id>/preview`
+### `GET /?action=thumbnail&photo=<id>` and `GET /?action=preview&photo=<id>`
 
 Require an active attendee session and return the corresponding published WebP/JPEG variant. The Worker rechecks publication state immediately before the R2 read, so a quarantined or withdrawn photo is no longer available even if its manifest was previously loaded. There is no public bucket URL and no full-size media endpoint at the thumbnail or preview paths.
 
-### `GET /api/photos/<id>/download?format=full|quick&requestId=<uuid>`
+### `GET /?action=download&photo=<id>&format=full|quick&requestId=<uuid>`
 
 Requires an active attendee session, the current licence acknowledgement, a valid UUID `requestId`, and `format=full` or `format=quick`. Returns an attachment from the private R2 bucket. The request ID binds retries and range requests to the same account, photo, and format; reuse with a different binding returns `409`. Published-state checks occur before the object is returned. Downloads record an aggregate total and a restricted individual request record.
 
 Individual download request records are retained for 90 days for rights follow-up. The format totals remain in aggregate storage after those individual records expire.
 
-### `POST /api/photos/<id>/removal-requests`
+### `POST /?action=remove&photo=<id>`
 
 Requires an active session and CSRF token.
 
@@ -80,11 +80,11 @@ The explanation is trimmed and limited to 2,000 characters. A valid request atom
 
 ## Organiser restore endpoint
 
-Cloudflare Access protects `photos.hackthehill.com/restore` and its descendants, plus `photos.hackthehill.com/api/restore` and its descendants, with the dedicated CTN-only Google Workspace application, its configured audience (`ACCESS_AUD`), and a one-hour session. The Worker requires a cryptographically verified Access JWT with the configured issuer (`ACCESS_TEAM`), audience, expiry, subject, and an `@ctn-rtc.org` email. It does not trust an email header and does not grant organiser privileges to an attendee OTP session. The application has no organiser dashboard, sign-in page, case interface, or rights lookup page.
+Cloudflare Access protects `photos.hackthehill.com/restore` and its descendants, with the dedicated CTN-only Google Workspace application, its configured audience (`ACCESS_AUD`), and a 30-minute session. The Worker requires a cryptographically verified Access JWT with the configured issuer (`ACCESS_TEAM`), audience, expiry, subject, and an `@ctn-rtc.org` email. It does not trust an email header and does not grant organiser privileges to an attendee OTP session. The application has no organiser dashboard, sign-in page, case interface, or rights lookup page.
 
 Removal notifications contain the photo and the request explanations snapshot needed for the decision. Their single button targets the Access-protected user route `/restore?case=<caseId>&version=<n>`. The shared gallery component shows only the small filename and an explicit Restore button. The page calls the internal API after Access verification; GET never mutates state.
 
-### `GET /api/restore/<caseId>`
+### `GET /restore?action=case&case=<caseId>`
 
 Returns the authenticated restore state:
 
@@ -100,7 +100,7 @@ Returns the authenticated restore state:
 
 The response is case-scoped and read-only. A supplied email-link `version` is checked against the current photo version; a stale link is rejected. `canRestore` is false when the photo is no longer eligible for this action or another pending case prevents an atomic restore.
 
-### `POST /api/restore/<caseId>`
+### `POST /restore?action=case&case=<caseId>`
 
 Requires the verified Access session, the returned CSRF token, same-origin request, and an explicit confirmation from the SPA. The body is:
 

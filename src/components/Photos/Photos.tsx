@@ -185,9 +185,9 @@ export default function Photos() {
 		setBusy(true);
 		setNotice(null);
 		try {
-			const next = await api<PhotoSession>("/api/auth/session");
+			const next = await api<PhotoSession>("/?action=session");
 			setSession(next);
-			if (next.authenticated) setManifest(await api<AlbumManifest>("/api/album"));
+			if (next.authenticated) setManifest(await api<AlbumManifest>("/?action=album"));
 		} catch {
 			setNotice({ kind: "error", text: disconnectedLabelRef.current });
 		} finally {
@@ -198,7 +198,7 @@ export default function Photos() {
 		if (!session?.authenticated || refreshingRef.current) return;
 		refreshingRef.current = true;
 		try {
-			const nextSession = await api<PhotoSession>("/api/auth/session");
+			const nextSession = await api<PhotoSession>("/?action=session");
 			if (!nextSession.authenticated) {
 				storageRemove(`hth-photo-favourites:${session.accountId || "unknown"}`);
 				setManifest(null);
@@ -206,7 +206,7 @@ export default function Photos() {
 				setNotice({ kind: "info", text: t.sessionExpired });
 				return;
 			}
-			const nextManifest = await api<AlbumManifest>("/api/album");
+			const nextManifest = await api<AlbumManifest>("/?action=album");
 			setSession(nextSession);
 			setManifest(nextManifest);
 		} catch {
@@ -235,7 +235,7 @@ export default function Photos() {
 		if (!session) return;
 		setNotice(null);
 		try {
-			await api("/api/auth/logout", { method: "POST", body: "{}", headers: csrfHeaders(session) });
+			await api("/?action=logout", { method: "POST", body: "{}", headers: csrfHeaders(session) });
 		} catch (error) {
 			setNotice({ kind: "error", text: error instanceof Error ? error.message : t.serviceError });
 			return;
@@ -262,7 +262,7 @@ export default function Photos() {
 				onAuthenticated={next => {
 					setBusy(true);
 					setSession(next);
-					void api<AlbumManifest>("/api/album")
+					void api<AlbumManifest>("/?action=album")
 						.then(setManifest)
 						.catch(() => setNotice({ kind: "error", text: t.disconnected }))
 						.finally(() => setBusy(false));
@@ -360,7 +360,7 @@ function Auth({
 		setBusy(true);
 		setNotice(null);
 		try {
-			await api("/api/auth/request", {
+			await api("/?action=request-code", {
 				method: "POST",
 				body: JSON.stringify({ email: email.trim(), language }),
 			});
@@ -380,7 +380,7 @@ function Auth({
 		setNotice(null);
 		try {
 			onAuthenticated(
-				await api<PhotoSession>("/api/auth/verify", {
+				await api<PhotoSession>("/?action=verify-code", {
 					method: "POST",
 					body: JSON.stringify({ email: email.trim(), code }),
 				}),
@@ -500,7 +500,7 @@ function Album({
 	useEffect(() => {
 		if (visitSent.current) return;
 		visitSent.current = true;
-		void api("/api/events", {
+		void api("/?action=events", {
 			method: "POST",
 			body: JSON.stringify({ photoIds: [], albumVisit: true }),
 			headers: csrfHeaders(session),
@@ -772,7 +772,7 @@ function Viewer({
 			if (queue.current.size) {
 				const ids = [...queue.current];
 				queue.current.clear();
-				void api("/api/events", {
+				void api("/?action=events", {
 					method: "POST",
 					body: JSON.stringify({ photoIds: ids, albumVisit: false }),
 					headers: csrfHeaders(session),
@@ -907,14 +907,14 @@ function LicenceDialog({
 	const acknowledge = async (format: "full" | "quick") => {
 		setBusy(true);
 		try {
-			await api("/api/licence/acknowledge", {
+			await api("/?action=licence", {
 				method: "POST",
 				body: JSON.stringify({ version: LICENCE_VERSION }),
 				headers: csrfHeaders(session),
 			});
 			const requestId = crypto.randomUUID();
 			window.location.assign(
-				`/api/photos/${encodeURIComponent(photo.id)}/download?format=${format}&requestId=${requestId}`,
+				`/?action=download&photo=${encodeURIComponent(photo.id)}&format=${format}&requestId=${requestId}`,
 			);
 		} catch (error) {
 			setNotice({ kind: "error", text: error instanceof Error ? error.message : t.serviceError });
@@ -990,7 +990,7 @@ function RemovalDialog({
 		setFailure(null);
 		requestId.current ||= crypto.randomUUID();
 		try {
-			await api(`/api/photos/${encodeURIComponent(photo.id)}/removal-requests`, {
+			await api(`/?action=remove&photo=${encodeURIComponent(photo.id)}`, {
 				method: "POST",
 				body: JSON.stringify({ explanation: explanation.trim(), requestId: requestId.current }),
 				headers: csrfHeaders(session),
