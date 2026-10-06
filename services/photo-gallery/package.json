@@ -10,7 +10,9 @@
 		"test": "vitest run",
 		"import:eligibility": "node tools/import-eligibility.mjs",
 		"revoke:eligibility": "node tools/revoke-eligibility.mjs",
-		"seed:local": "node tools/seed-local.mjs"
+		"seed:local": "node tools/seed-local.mjs",
+		"deploy:staging": "wrangler deploy --config wrangler.jsonc --env=\"\" --no-autoconfig --old-asset-ttl 86400",
+		"deploy:production": "wrangler deploy --config wrangler.jsonc --env production --no-autoconfig --old-asset-ttl 86400"
 	},
 	"devDependencies": {
 		"@cloudflare/vitest-pool-workers": "^0.22.0",
