@@ -21,4 +21,11 @@
 		},
 	],
 	"r2_buckets": [{ "binding": "PHOTO_BUCKET", "bucket_name": "photo-gallery-tests" }],
+	"assets": {
+		"directory": "./tests/assets",
+		"binding": "ASSETS",
+		"run_worker_first": ["/", "/restore", "/restore/"],
+		"html_handling": "auto-trailing-slash",
+		"not_found_handling": "404-page",
+	},
 }

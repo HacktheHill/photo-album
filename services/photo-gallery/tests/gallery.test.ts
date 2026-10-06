@@ -981,3 +981,13 @@ it("serves only approved public previews and respects removal even with a matchi
 	await env.DB.prepare("UPDATE photos SET status='quarantined' WHERE id=?").bind(id).run();
 	expect((await SELF.fetch(url, { headers: { "if-none-match": '"test-hash"' } })).status).toBe(404);
 });
+
+it("serves the album page for GET and HEAD but not other methods", async () => {
+	const get = await SELF.fetch("https://gallery.test/");
+	expect(get.status).toBe(200);
+	expect(await get.text()).toContain("Album test page");
+	const head = await SELF.fetch("https://gallery.test/", { method: "HEAD" });
+	expect(head.status).toBe(200);
+	expect(head.headers.get("content-type")).toContain("text/html");
+	expect((await SELF.fetch("https://gallery.test/", { method: "POST" })).status).toBe(404);
+});
