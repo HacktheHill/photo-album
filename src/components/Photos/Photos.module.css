@@ -23,19 +23,33 @@
 	text-decoration: none;
 }
 .brand img {
-	width: min(240px, 50vw);
+	width: min(240px, 40vw);
 	height: auto;
 	display: block;
 }
 .topActions {
 	display: flex;
 	align-items: center;
-	gap: 1.25rem;
+	gap: clamp(0.75rem, 2vw, 1.25rem);
 	font-size: 0.82rem;
 }
 .topActions a {
 	color: #fff9ef;
 	text-decoration: none;
+}
+.signOut {
+	min-height: var(--control-height);
+	padding: 0.25rem 0;
+	border: 0;
+	color: var(--color-cream);
+	background: transparent;
+	font-size: 0.86rem;
+	white-space: nowrap;
+	text-decoration: underline;
+	text-underline-offset: 0.2em;
+}
+.signOut:hover {
+	color: var(--color-peach);
 }
 .language {
 	padding: 0.25rem 0;
@@ -137,8 +151,7 @@
 	font-weight: 800;
 }
 .authCard input,
-.dialog textarea,
-.search input {
+.dialog textarea {
 	width: 100%;
 	padding: 0.85rem 0.95rem;
 	border: 1px solid var(--color-control-border);
@@ -147,8 +160,7 @@
 	background: #fff;
 }
 .authCard input:focus,
-.dialog textarea:focus,
-.search input:focus {
+.dialog textarea:focus {
 	border-color: var(--color-accent);
 	outline: 2px solid var(--color-accent);
 	outline-offset: 1px;
@@ -351,28 +363,6 @@ button:disabled {
 .categoryNav .activeTab span {
 	color: #fff3b6;
 }
-.search {
-	display: flex;
-	align-items: center;
-	gap: 0.45rem;
-	max-width: 24rem;
-	padding: 0 0.8rem;
-	border: 1px solid var(--color-control-border);
-	border-radius: 0.5rem;
-	color: var(--color-muted);
-	background: #fff;
-}
-.search input {
-	min-height: 2.6rem;
-	padding: 0.35rem 0;
-	border: 0;
-	outline: 0;
-}
-.resultCount {
-	margin: 1.4rem 0;
-	color: #805044;
-	font-size: 0.8rem;
-}
 .grid {
 	display: grid;
 	grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -574,29 +564,6 @@ button:disabled {
 	width: 100%;
 	text-align: left;
 }
-.details {
-	margin-top: 1.4rem;
-	border-top: 1px solid rgb(255 255 255 / 15%);
-	color: #fff3b6;
-	font-size: 0.8rem;
-}
-.details summary {
-	padding: 0.8rem 0;
-	cursor: pointer;
-}
-.details dl {
-	display: grid;
-	grid-template-columns: 8rem 1fr;
-	gap: 0.45rem 1rem;
-	margin: 0 0 0.7rem;
-}
-.details dt {
-	color: #f8cc8d;
-}
-.details dd {
-	margin: 0;
-	overflow-wrap: anywhere;
-}
 .dialog {
 	position: relative;
 	width: min(100%, 43rem);
@@ -701,9 +668,6 @@ button:disabled {
 	.cardMeta {
 		padding: 0.55rem;
 	}
-	.search {
-		max-width: none;
-	}
 	.caseCard {
 		grid-template-columns: 1fr;
 	}
@@ -804,11 +768,19 @@ button:disabled {
 	border-color: var(--color-control-border);
 }
 .authCard input::placeholder,
-.dialog textarea::placeholder,
-.search input::placeholder {
+.dialog textarea::placeholder {
 	color: var(--color-muted);
 	opacity: 1;
 }
 .cardMeta span:last-child {
 	white-space: normal;
+}
+
+.viewerCategory {
+	margin: 0;
+	color: var(--color-cream);
+	font-family: inherit;
+	font-size: 1.1rem;
+	font-weight: 700;
+	line-height: 1.4;
 }
