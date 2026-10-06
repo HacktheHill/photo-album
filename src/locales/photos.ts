@@ -25,6 +25,8 @@ const rawCopy = {
 	en: {
 		album: "Hack the Hill III photo album",
 		views: "views",
+		oneView: "view",
+		oneDownload: "Download",
 		email: "Email used for the event",
 		send: "Log in",
 		code: "Your eight-digit code",
@@ -73,6 +75,8 @@ const rawCopy = {
 	fr: {
 		album: "Album photo de Hack the Hill III",
 		views: "vues",
+		oneView: "vue",
+		oneDownload: "Téléchargement",
 		email: "Courriel utilisé pour l’événement",
 		send: "Se connecter",
 		code: "Votre code à huit chiffres",
