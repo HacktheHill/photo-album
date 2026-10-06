@@ -43,8 +43,9 @@ def inventory() -> dict:
 class SeedSqlTests(unittest.TestCase):
     def setUp(self) -> None:
         self.connection = sqlite3.connect(":memory:")
-        schema = (SCRIPT_DIR.parent.parent / "services/photo-gallery/migrations/0001_initial.sql").read_text(encoding="utf-8")
-        self.connection.executescript(schema)
+        migrations = SCRIPT_DIR.parent.parent / "services/photo-gallery/migrations"
+        for migration in sorted(migrations.glob("*.sql")):
+            self.connection.executescript(migration.read_text(encoding="utf-8"))
 
     def tearDown(self) -> None:
         self.connection.close()
@@ -57,16 +58,16 @@ class SeedSqlTests(unittest.TestCase):
         self.assertIn("ON CONFLICT(photo_id, format) DO NOTHING", sql)
 
         self.connection.executescript(sql)
-        self.connection.execute("UPDATE photos SET status='withdrawn', version=7, full_key='old/full.jpg', updated_at=200 WHERE id='photo-id'")
+        self.connection.execute("UPDATE photos SET status='withdrawn', version=7, updated_at=200 WHERE id='photo-id'")
         self.connection.execute("UPDATE photo_variants SET object_key='old/preview.webp', sha256='old-hash' WHERE photo_id='photo-id' AND format='preview'")
         self.connection.commit()
 
         # A second initial import must not republish, reset the revision, or
         # replace keys/hashes that moderation or publication already owns.
         self.connection.executescript(sql)
-        photo = self.connection.execute("SELECT status, version, full_key, updated_at FROM photos WHERE id='photo-id'").fetchone()
+        photo = self.connection.execute("SELECT status, version, updated_at FROM photos WHERE id='photo-id'").fetchone()
         variant = self.connection.execute("SELECT object_key, sha256 FROM photo_variants WHERE photo_id='photo-id' AND format='preview'").fetchone()
-        self.assertEqual(photo, ("withdrawn", 7, "old/full.jpg", 200))
+        self.assertEqual(photo, ("withdrawn", 7, 200))
         self.assertEqual(variant, ("old/preview.webp", "old-hash"))
 
     def test_seed_inserts_all_four_variants_on_empty_schema(self) -> None:

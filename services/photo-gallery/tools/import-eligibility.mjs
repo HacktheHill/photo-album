@@ -25,7 +25,7 @@ for (const item of source.accounts) {
 	const emailHash = createHmac("sha256", secret).update(email).digest("base64url");
 	const quote = value => `'${String(value).replaceAll("'", "''")}'`;
 	statements.push(
-		`INSERT INTO accounts(id,email,email_hash,role,active,created_at,revoked_at) VALUES(${quote(id)},${quote(email)},${quote(emailHash)},'viewer',1,${now},NULL) ON CONFLICT(email_hash) DO UPDATE SET email=excluded.email,active=1,revoked_at=NULL;`,
+		`INSERT INTO accounts(id,email,email_hash,active,created_at,revoked_at) VALUES(${quote(id)},${quote(email)},${quote(emailHash)},1,${now},NULL) ON CONFLICT(email_hash) DO UPDATE SET email=excluded.email,active=1,revoked_at=NULL;`,
 	);
 }
 if (!statements.length) throw new Error("No eligible email addresses found");

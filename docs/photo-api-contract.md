@@ -53,10 +53,10 @@ The version must match the current D1 licence row and Worker configuration. A su
 Requires an active session and CSRF token.
 
 ```json
-{ "photoIds": ["opaque-photo-id"], "albumVisit": true }
+{ "photoIds": ["opaque-photo-id"] }
 ```
 
-The Worker deduplicates photo opens per session and records only daily aggregate counts. `albumVisit` increments an aggregate album-visit counter. No identity-linked browsing history is created.
+The Worker deduplicates photo opens per session with temporary pseudonymous keys and records daily aggregate counts. Album arrivals do not send a visit event.
 
 ### `GET /?action=highlight&photo=<id>`
 

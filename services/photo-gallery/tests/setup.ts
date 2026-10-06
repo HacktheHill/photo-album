@@ -6,6 +6,8 @@ import migrationThree from "../migrations/0003_moderation_operation_tokens.sql?r
 import migrationFour from "../migrations/0004_case_retention.sql?raw";
 import migrationFive from "../migrations/0005_aggregate_download_formats.sql?raw";
 
+import migrationSix from "../migrations/0006_simplify_schema.sql?raw";
+
 // Keep trigger bodies together; D1's migration helper executes one statement at a time.
 const split = (sql: string): string[] =>
 	sql
@@ -18,4 +20,5 @@ await applyD1Migrations(env.DB, [
 	{ name: "0003_moderation_operation_tokens.sql", queries: split(migrationThree) },
 	{ name: "0004_case_retention.sql", queries: split(migrationFour) },
 	{ name: "0005_aggregate_download_formats.sql", queries: split(migrationFive) },
+	{ name: "0006_simplify_schema.sql", queries: split(migrationSix) },
 ]);

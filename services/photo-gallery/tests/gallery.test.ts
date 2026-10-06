@@ -88,14 +88,16 @@ async function requestCode(language: "en" | "fr" = "en"): Promise<string> {
 
 async function seed(): Promise<void> {
 	await env.DB.batch([
+		env.DB.prepare("INSERT INTO accounts(id,email,email_hash,active,created_at) VALUES('acct-1',?,?,1,?)").bind(
+			email,
+			await hmac(email),
+			Date.now(),
+		),
 		env.DB.prepare(
-			"INSERT INTO accounts(id,email,email_hash,role,active,created_at) VALUES('acct-1',?,?, 'viewer',1,?)",
-		).bind(email, await hmac(email), Date.now()),
-		env.DB.prepare(
-			"INSERT INTO photos(id,category,filename,version,status,thumbnail_key,preview_key,full_key,width,height,created_at,updated_at) VALUES('photo-1','Opening','sample.jpg',1,'published','photo-1/thumb','photo-1/preview','photo-1/full',2,2,?,?)",
+			"INSERT INTO photos(id,category,filename,version,status,width,height,created_at,updated_at) VALUES('photo-1','Opening','sample.jpg',1,'published',2,2,?,?)",
 		).bind(Date.now(), Date.now()),
 		env.DB.prepare(
-			"INSERT INTO photos(id,category,filename,version,status,thumbnail_key,preview_key,full_key,width,height,created_at,updated_at) VALUES('photo-2','Closing','second.jpg',1,'published','photo-2/thumb','photo-2/preview','photo-2/full',2,2,?,?)",
+			"INSERT INTO photos(id,category,filename,version,status,width,height,created_at,updated_at) VALUES('photo-2','Closing','second.jpg',1,'published',2,2,?,?)",
 		).bind(Date.now(), Date.now()),
 		env.DB.prepare(
 			"INSERT INTO photo_variants(photo_id,format,object_key,width,height,bytes,content_type) VALUES('photo-1','thumbnail','photo-1/thumb',2,2,4,'image/jpeg'),('photo-1','preview','photo-1/preview',2,2,4,'image/jpeg'),('photo-1','full','photo-1/full',2,2,4,'image/jpeg'),('photo-1','quick','photo-1/quick',2,2,4,'image/jpeg')",
@@ -125,11 +127,9 @@ async function reset(): Promise<void> {
 		env.DB.prepare("DELETE FROM download_requests"),
 		env.DB.prepare("DELETE FROM viewer_opens"),
 		env.DB.prepare("DELETE FROM daily_aggregates"),
-		env.DB.prepare("DELETE FROM album_visits"),
 		env.DB.prepare("DELETE FROM notification_outbox"),
 		env.DB.prepare("DELETE FROM moderation_audit"),
-		env.DB.prepare("DELETE FROM removal_reports"),
-		env.DB.prepare("DELETE FROM removal_cases"),
+		env.DB.prepare("DELETE FROM removal_requests"),
 		env.DB.prepare("DELETE FROM sessions"),
 		env.DB.prepare("DELETE FROM code_challenges"),
 		env.DB.prepare("DELETE FROM photo_variants"),
@@ -486,12 +486,7 @@ describe("photo gallery in the Workers runtime", () => {
 				version: 3,
 			});
 			expect(
-				await env.DB.prepare("SELECT status FROM removal_reports WHERE case_id=?")
-					.bind(firstCase.caseId)
-					.first(),
-			).toMatchObject({ status: "dismissed" });
-			expect(
-				await env.DB.prepare("SELECT status FROM removal_cases WHERE id=?").bind(firstCase.caseId).first(),
+				await env.DB.prepare("SELECT status FROM removal_requests WHERE id=?").bind(firstCase.caseId).first(),
 			).toMatchObject({ status: "dismissed" });
 			expect(
 				await env.DB.prepare("SELECT reason FROM moderation_audit WHERE case_id=?")
@@ -714,7 +709,7 @@ describe("photo gallery in the Workers runtime", () => {
 		expect(
 			(
 				await env.DB.prepare(
-					"SELECT COUNT(*) as count FROM removal_reports WHERE requester_account_id='acct-1' AND photo_id='photo-1'",
+					"SELECT COUNT(*) as count FROM removal_requests WHERE requester_account_id='acct-1' AND photo_id='photo-1'",
 				).first<{ count: number }>()
 			)?.count,
 		).toBe(5);
@@ -724,20 +719,14 @@ describe("photo gallery in the Workers runtime", () => {
 		const old = Date.now() - 366 * 24 * 60 * 60 * 1000;
 		await env.DB.batch([
 			env.DB.prepare(
-				"INSERT INTO removal_cases(id,photo_id,requester_account_id,explanation,status,photo_version,cross_channel_reviewed,created_at,updated_at) VALUES('old-case','photo-1','acct-1','Old resolved case','dismissed',1,0,?,?)",
-			).bind(old, old),
+				"INSERT INTO removal_requests(id,photo_id,requester_account_id,explanation,request_id,status,photo_version,created_at,updated_at,resolved_at) VALUES('old-case','photo-1','acct-1','Old resolved request','old-request','dismissed',1,?,?,?)",
+			).bind(old, old, old),
 			env.DB.prepare(
-				"INSERT INTO removal_reports(id,case_id,photo_id,requester_account_id,explanation,request_id,status,photo_version,created_at,resolved_at) VALUES('old-report','old-case','photo-1','acct-1','Old resolved report','old-request','dismissed',1,?,?)",
-			).bind(old, old),
-			env.DB.prepare(
-				"INSERT INTO moderation_audit(id,actor_account_id,action,photo_id,reason,created_at) VALUES('old-audit','admin-subject','dismiss','photo-1','Old audit',?)",
+				"INSERT INTO moderation_audit(id,actor_subject,action,photo_id,reason,created_at) VALUES('old-audit','admin-subject','dismiss','photo-1','Old audit',?)",
 			).bind(old),
 			env.DB.prepare(
-				"INSERT INTO removal_cases(id,photo_id,requester_account_id,explanation,status,photo_version,cross_channel_reviewed,created_at,updated_at) VALUES('pending-retained','photo-1','acct-1','Pending case','pending',1,0,?,?)",
+				"INSERT INTO removal_requests(id,photo_id,requester_account_id,explanation,request_id,status,photo_version,created_at,updated_at) VALUES('pending-retained','photo-1','acct-1','Pending request','pending-retained-request','pending',1,?,?)",
 			).bind(old, old),
-			env.DB.prepare(
-				"INSERT INTO removal_reports(id,case_id,photo_id,requester_account_id,explanation,request_id,status,photo_version,created_at) VALUES('pending-retained-report','pending-retained','photo-1','acct-1','Pending report','pending-retained-request','pending',1,?)",
-			).bind(old),
 		]);
 		const waits: Promise<unknown>[] = [];
 		await worker.scheduled({} as ScheduledController, env, {
@@ -748,14 +737,7 @@ describe("photo gallery in the Workers runtime", () => {
 		await Promise.all(waits);
 		expect(
 			(
-				await env.DB.prepare("SELECT COUNT(*) as count FROM removal_cases WHERE id='old-case'").first<{
-					count: number;
-				}>()
-			)?.count,
-		).toBe(0);
-		expect(
-			(
-				await env.DB.prepare("SELECT COUNT(*) as count FROM removal_reports WHERE id='old-report'").first<{
+				await env.DB.prepare("SELECT COUNT(*) as count FROM removal_requests WHERE id='old-case'").first<{
 					count: number;
 				}>()
 			)?.count,
@@ -769,7 +751,9 @@ describe("photo gallery in the Workers runtime", () => {
 		).toBe(0);
 		expect(
 			(
-				await env.DB.prepare("SELECT COUNT(*) as count FROM removal_cases WHERE id='pending-retained'").first<{
+				await env.DB.prepare(
+					"SELECT COUNT(*) as count FROM removal_requests WHERE id='pending-retained'",
+				).first<{
 					count: number;
 				}>()
 			)?.count,
@@ -943,7 +927,7 @@ it("serves only approved public previews and respects removal even with a matchi
 	await reset();
 	const id = [...publicHighlights][0];
 	await env.DB.prepare(
-		"INSERT INTO photos(id,category,filename,version,status,thumbnail_key,preview_key,full_key,width,height,created_at,updated_at) SELECT ?,category,filename,version,status,thumbnail_key,preview_key,full_key,width,height,created_at,updated_at FROM photos WHERE id='photo-1'",
+		"INSERT INTO photos(id,category,filename,version,status,width,height,created_at,updated_at) SELECT ?,category,filename,version,status,width,height,created_at,updated_at FROM photos WHERE id='photo-1'",
 	)
 		.bind(id)
 		.run();
