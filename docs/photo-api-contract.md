@@ -60,7 +60,7 @@ The Worker deduplicates photo opens per session with temporary pseudonymous keys
 
 ### `GET /?action=highlight&photo=<id>`
 
-Returns an edited preview without sign-in only for IDs in `services/photo-gallery/src/public-highlights.ts`, selected for the public event website. Other IDs return `404`. Publication status is checked on every request, including conditional requests; responses use `Cache-Control: no-store`. Full-resolution downloads remain protected.
+Returns an edited preview without sign-in only for IDs in `services/photo-gallery/src/public-highlights.ts`, selected for the public event website. Other IDs return `404`. Publication status is checked on every request, including conditional requests; responses use `Cache-Control: no-cache` with an ETag, so browsers revalidate every time and unchanged previews return `304`. Full-resolution downloads remain protected.
 
 ### `GET /?action=thumbnail&photo=<id>` and `GET /?action=preview&photo=<id>`
 
@@ -70,7 +70,7 @@ Require an active attendee session and return the corresponding published WebP/J
 
 Requires an active attendee session, the current licence acknowledgement, a valid UUID `requestId`, and `format=full` or `format=quick`. Returns an attachment from the private R2 bucket. The request ID binds retries and range requests to the same account, photo, and format; reuse with a different binding returns `409`. Published-state checks occur before the object is returned. Downloads record an aggregate total and a restricted individual request record.
 
-Individual download request records are retained for 90 days for rights follow-up. The format totals remain in aggregate storage after those individual records expire.
+Individual download request records are retained for 90 days for rights follow-up. Anonymous daily download totals remain in aggregate storage after those individual records expire; the aggregate does not record the format.
 
 ### `POST /?action=remove&photo=<id>`
 
