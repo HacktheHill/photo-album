@@ -7,8 +7,8 @@ const photo = {
 	version: "1",
 	width: 2400,
 	height: 1600,
-	thumbnail: { url: "/api/photos/opening-001/thumbnail", width: 640, height: 427, bytes: 42_000 },
-	preview: { url: "/api/photos/opening-001/preview", width: 1600, height: 1067, bytes: 180_000 },
+	thumbnail: { url: "/?action=thumbnail&photo=opening-001", width: 640, height: 427, bytes: 42_000 },
+	preview: { url: "/?action=preview&photo=opening-001", width: 1600, height: 1067, bytes: 180_000 },
 	downloads: {
 		full: { width: 6000, height: 4000, bytes: 2_400_000 },
 		quick: { width: 2048, height: 1365, bytes: 420_000 },
@@ -20,7 +20,7 @@ const tinyPng = Buffer.from(
 );
 
 async function routePhotoMedia(page: Page) {
-	await page.route(/\/api\/photos\/[^/]+\/(thumbnail|preview)(?:\?.*)?$/, route =>
+	await page.route(/\/\?action=(thumbnail|preview)&photo=[^&]+$/, route =>
 		route.fulfill({
 			status: 200,
 			contentType: "image/png",
@@ -31,7 +31,7 @@ async function routePhotoMedia(page: Page) {
 }
 
 async function routeAttendee(page: Page, authenticated = true) {
-	await page.route("**/api/auth/session", route =>
+	await page.route("**/?action=session", route =>
 		route.fulfill({
 			json: authenticated
 				? { authenticated: true, csrfToken: "csrf-attendee", accountId: "acct-1", licenceVersion: "2026-10-06" }
@@ -40,7 +40,7 @@ async function routeAttendee(page: Page, authenticated = true) {
 	);
 	if (authenticated) {
 		await routePhotoMedia(page);
-		await page.route("**/api/album", route =>
+		await page.route("**/?action=album", route =>
 			route.fulfill({
 				json: {
 					version: "1",
@@ -70,7 +70,8 @@ async function expectTopDialogContainsFocus(page: Page) {
 test("unauthenticated arrival contains no protected photo media", async ({ page }) => {
 	const mediaRequests: string[] = [];
 	page.on("request", request => {
-		if (request.url().includes("/api/photos/")) mediaRequests.push(request.url());
+		if (["thumbnail", "preview"].includes(new URL(request.url()).searchParams.get("action") ?? ""))
+			mediaRequests.push(request.url());
 	});
 	await routeAttendee(page, false);
 	await page.goto("/");
@@ -83,11 +84,11 @@ test("unauthenticated arrival contains no protected photo media", async ({ page 
 
 test("email code request supports paste and verifies through the API contract", async ({ page }) => {
 	await routeAttendee(page, false);
-	await page.route("**/api/auth/request", async route => {
+	await page.route("**/?action=request-code", async route => {
 		expect(await route.request().postDataJSON()).toEqual({ email: "attendee@example.org", language: "en" });
 		await route.fulfill({ status: 202, json: { accepted: true } });
 	});
-	await page.route("**/api/auth/verify", async route => {
+	await page.route("**/?action=verify-code", async route => {
 		expect(await route.request().postDataJSON()).toEqual({ email: "attendee@example.org", code: "12345678" });
 		await route.fulfill({
 			json: {
@@ -99,12 +100,12 @@ test("email code request supports paste and verifies through the API contract", 
 		});
 	});
 	const eventBodies: Array<{ photoIds: string[]; albumVisit: boolean }> = [];
-	await page.route("**/api/events", async route => {
+	await page.route("**/?action=events", async route => {
 		eventBodies.push(await route.request().postDataJSON());
 		await route.fulfill({ json: {} });
 	});
 	await routePhotoMedia(page);
-	await page.route("**/api/album", route => route.fulfill({ json: { version: "1", photos: [photo] } }));
+	await page.route("**/?action=album", route => route.fulfill({ json: { version: "1", photos: [photo] } }));
 	await page.goto("/");
 	await page.locator("#photo-email").fill("attendee@example.org");
 	await page.getByRole("button", { name: "Log in" }).click();
@@ -142,13 +143,13 @@ test("email code request supports paste and verifies through the API contract", 
 
 test("download opens bilingual terms and cancellation makes no download request", async ({ page }) => {
 	await routeAttendee(page);
-	await page.route("**/api/events", route => route.fulfill({ json: {} }));
+	await page.route("**/?action=events", route => route.fulfill({ json: {} }));
 	await page.goto("/");
 	await page.getByRole("button", { name: /View photo: IMG_0001/ }).click();
 	await expect(page.getByRole("dialog")).toBeVisible();
 	let downloadRequests = 0;
 	page.on("request", request => {
-		if (new URL(request.url()).pathname.endsWith("/download")) downloadRequests++;
+		if (new URL(request.url()).searchParams.get("action") === "download") downloadRequests++;
 	});
 	await page.getByRole("button", { name: /Download/ }).click();
 	await expect(page.getByRole("heading", { name: "Before you download" })).toBeVisible();
@@ -168,7 +169,7 @@ test("download opens bilingual terms and cancellation makes no download request"
 
 test("removal dialog traps focus and Escape restores the viewer", async ({ page }) => {
 	await routeAttendee(page);
-	await page.route("**/api/events", route => route.fulfill({ json: {} }));
+	await page.route("**/?action=events", route => route.fulfill({ json: {} }));
 	await page.goto("/");
 	await page.getByRole("button", { name: /View photo: IMG_0001/ }).click();
 	await page.getByRole("button", { name: "Request removal" }).click();
@@ -184,11 +185,11 @@ test("removal dialog traps focus and Escape restores the viewer", async ({ page 
 
 test("viewer keeps the full preview composition and moves with keyboard", async ({ page }) => {
 	await routeAttendee(page);
-	await page.route("**/api/events", route => route.fulfill({ json: {} }));
+	await page.route("**/?action=events", route => route.fulfill({ json: {} }));
 	await page.goto("/");
 	await page.getByRole("button", { name: /View photo: IMG_0001/ }).click();
 	const viewerImage = page.getByRole("dialog").locator("img");
-	await expect(viewerImage).toHaveAttribute("src", "/api/photos/opening-001/preview");
+	await expect(viewerImage).toHaveAttribute("src", "/?action=preview&photo=opening-001");
 	await expect(viewerImage).toHaveAttribute("width", "1600");
 	await expect
 		.poll(() =>
@@ -216,14 +217,14 @@ test("unavailable shared photo is neutral and corrupted favourites do not break 
 test("returning to a visible album closes a withdrawn viewer without remounting the shell", async ({ page }) => {
 	await routeAttendee(page);
 	let revoked = false;
-	await page.route("**/api/auth/session", route =>
+	await page.route("**/?action=session", route =>
 		route.fulfill({
 			json: revoked
 				? { authenticated: true, csrfToken: "csrf-attendee", accountId: "acct-1" }
 				: { authenticated: true, csrfToken: "csrf-attendee", accountId: "acct-1" },
 		}),
 	);
-	await page.route("**/api/album", route =>
+	await page.route("**/?action=album", route =>
 		route.fulfill({
 			json: {
 				version: "2",
@@ -244,9 +245,7 @@ test("returning to a visible album closes a withdrawn viewer without remounting 
 
 test("logout failure keeps the authenticated album and offers the same retry action", async ({ page }) => {
 	await routeAttendee(page);
-	await page.route("**/api/auth/logout", route =>
-		route.fulfill({ status: 503, json: { error: "temporary outage" } }),
-	);
+	await page.route("**/?action=logout", route => route.fulfill({ status: 503, json: { error: "temporary outage" } }));
 	await page.goto("/");
 	await page.getByRole("button", { name: "Sign out" }).click();
 	await expect(page.getByRole("alert")).toContainText("temporary outage");
@@ -266,7 +265,7 @@ test("standalone root works on mobile and copies share links from its current or
 		});
 	});
 	await routeAttendee(page);
-	await page.route("**/api/events", route => route.fulfill({ json: {} }));
+	await page.route("**/?action=events", route => route.fulfill({ json: {} }));
 	await page.goto("/");
 	await expect(page.getByRole("heading", { name: "Photo album" })).toBeVisible();
 	await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
@@ -281,7 +280,7 @@ test("standalone root works on mobile and copies share links from its current or
 
 test("restoration is a read-only email arrival followed by an explicit protected action", async ({ page }) => {
 	let actions = 0;
-	await page.route("**/api/restore/case-1?version=2", async route => {
+	await page.route("**/restore?action=case&case=case-1&version=2", async route => {
 		if (route.request().method() === "POST") {
 			actions++;
 			expect(route.request().headers()["x-csrf-token"]).toBe("restore-csrf");
@@ -312,7 +311,7 @@ test("restoration is a read-only email arrival followed by an explicit protected
 });
 
 test("stale restoration email offers no restoration action", async ({ page }) => {
-	await page.route("**/api/restore/case-1?version=2", route =>
+	await page.route("**/restore?action=case&case=case-1&version=2", route =>
 		route.fulfill({
 			json: {
 				filename: "IMG_0001.jpg",
@@ -337,7 +336,7 @@ test("the restoration route handles a missing email context", async ({ page }) =
 test("a failed removal preserves the explanation and idempotent retry", async ({ page }) => {
 	await routeAttendee(page);
 	const bodies: { explanation: string; requestId: string }[] = [];
-	await page.route("**/api/photos/opening-001/removal-requests", async route => {
+	await page.route("**/?action=remove&photo=opening-001", async route => {
 		bodies.push(route.request().postDataJSON());
 		await route.fulfill({ status: 500, json: { error: "Unavailable" } });
 	});

@@ -20,9 +20,10 @@
 		"worker:test": "npm --prefix services/photo-gallery test",
 		"test:pipeline": "python3 -m unittest discover -s scripts/photos -p \"test_*.py\"",
 		"verify": "npm run format:check && npm run lint && npm run typecheck && npm run worker:check && npm run worker:test && npm run test:tools && npm run test:pipeline && npm run test:e2e",
-		"deploy:staging": "npm run build && npm --prefix services/photo-gallery exec -- wrangler deploy --env=\"\"",
+		"deploy:staging": "npm run build && npm --prefix services/photo-gallery run deploy:staging",
 		"deploy:dry-run": "npm run build && npm --prefix services/photo-gallery run deploy:dry-run",
-		"test:tools": "node --test services/photo-gallery/tools/*.test.mjs"
+		"test:tools": "node --test services/photo-gallery/tools/*.test.mjs",
+		"deploy:production": "npm run build && npm --prefix services/photo-gallery run deploy:production"
 	},
 	"dependencies": {
 		"@astrojs/check": "0.9.9",

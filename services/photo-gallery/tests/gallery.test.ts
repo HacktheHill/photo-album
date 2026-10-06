@@ -73,7 +73,7 @@ async function hmac(value: string): Promise<string> {
 }
 
 async function requestCode(language: "en" | "fr" = "en"): Promise<string> {
-	const response = await SELF.fetch("https://gallery.test/api/auth/request", {
+	const response = await SELF.fetch("https://gallery.test/?action=request-code", {
 		method: "POST",
 		headers: { origin: "https://gallery.test", "content-type": "application/json" },
 		body: JSON.stringify({ email, language }),
@@ -161,9 +161,12 @@ describe("photo gallery in the Workers runtime", () => {
 		]) {
 			const fixture = await accessFixture(overrides);
 			try {
-				const response = await SELF.fetch("https://gallery.test/api/restore/missing-case?version=2", {
-					headers: { "cf-access-jwt-assertion": fixture.token },
-				});
+				const response = await SELF.fetch(
+					"https://gallery.test/restore?action=case&case=missing-case&version=2",
+					{
+						headers: { "cf-access-jwt-assertion": fixture.token },
+					},
+				);
 				expect(response.status).toBe(403);
 			} finally {
 				fixture.restore();
@@ -172,50 +175,53 @@ describe("photo gallery in the Workers runtime", () => {
 	});
 
 	it("keeps auth generic, protects media, and gates downloads on the licence", async () => {
-		const invalidEmail = await SELF.fetch("https://gallery.test/api/auth/request", {
+		const invalidEmail = await SELF.fetch("https://gallery.test/?action=request-code", {
 			method: "POST",
 			headers: { origin: "https://gallery.test", "content-type": "application/json" },
 			body: JSON.stringify({ email: "not-an-email", language: "en" }),
 		});
 		expect(invalidEmail.status).toBe(202);
 		expect(await invalidEmail.json()).toEqual({ accepted: true });
-		const malformedBody = await SELF.fetch("https://gallery.test/api/auth/request", {
+		const malformedBody = await SELF.fetch("https://gallery.test/?action=request-code", {
 			method: "POST",
 			headers: { origin: "https://gallery.test", "content-type": "application/json" },
 			body: "{",
 		});
 		expect(malformedBody.status).toBe(400);
 		expect(await malformedBody.json()).toEqual({ error: "Invalid request." });
-		const unknown = await SELF.fetch("https://gallery.test/api/auth/request", {
+		const unknown = await SELF.fetch("https://gallery.test/?action=request-code", {
 			method: "POST",
 			headers: { origin: "https://gallery.test", "content-type": "application/json" },
 			body: JSON.stringify({ email: "unknown@example.org", language: "en" }),
 		});
 		expect(unknown.status).toBe(202);
 		expect(await unknown.json()).toEqual({ accepted: true });
-		const unknownRetry = await SELF.fetch("https://gallery.test/api/auth/request", {
+		const unknownRetry = await SELF.fetch("https://gallery.test/?action=request-code", {
 			method: "POST",
 			headers: { origin: "https://gallery.test", "content-type": "application/json" },
 			body: JSON.stringify({ email: "unknown@example.org", language: "fr" }),
 		});
 		expect(unknownRetry.status).toBe(429);
-		const unauthenticated = await SELF.fetch("https://gallery.test/api/album");
+		const unauthenticated = await SELF.fetch("https://gallery.test/?action=album");
 		expect(unauthenticated.status).toBe(401);
-		const malformedSessionCookie = await SELF.fetch("https://gallery.test/api/auth/session", {
+		const malformedSessionCookie = await SELF.fetch("https://gallery.test/?action=session", {
 			headers: { cookie: "photo_gallery_session=%" },
 		});
 		expect(malformedSessionCookie.status).toBe(200);
 		expect(await malformedSessionCookie.json()).toEqual({ authenticated: false });
-		const malformedAlbumCookie = await SELF.fetch("https://gallery.test/api/album", {
+		const malformedAlbumCookie = await SELF.fetch("https://gallery.test/?action=album", {
 			headers: { cookie: "photo_gallery_session=%" },
 		});
 		expect(malformedAlbumCookie.status).toBe(401);
-		const malformedAccessCookie = await SELF.fetch("https://gallery.test/api/restore/missing-case?version=2", {
-			headers: { cookie: "CF_Authorization=%" },
-		});
+		const malformedAccessCookie = await SELF.fetch(
+			"https://gallery.test/restore?action=case&case=missing-case&version=2",
+			{
+				headers: { cookie: "CF_Authorization=%" },
+			},
+		);
 		expect(malformedAccessCookie.status).toBe(403);
 		const code = await requestCode();
-		const verified = await SELF.fetch("https://gallery.test/api/auth/verify", {
+		const verified = await SELF.fetch("https://gallery.test/?action=verify-code", {
 			method: "POST",
 			headers: { origin: "https://gallery.test", "content-type": "application/json" },
 			body: JSON.stringify({ email, code }),
@@ -223,7 +229,7 @@ describe("photo gallery in the Workers runtime", () => {
 		expect(verified.status).toBe(200);
 		const cookie = verified.headers.get("set-cookie")?.split(";")[0] ?? "";
 		const session = (await verified.json()) as { csrfToken: string };
-		const album = await SELF.fetch("https://gallery.test/api/album", { headers: { cookie } });
+		const album = await SELF.fetch("https://gallery.test/?action=album", { headers: { cookie } });
 		expect(album.status).toBe(200);
 		const albumBody = (await album.json()) as {
 			version: string;
@@ -231,8 +237,8 @@ describe("photo gallery in the Workers runtime", () => {
 		};
 		expect(albumBody.version).toBe("2026-10-06");
 		expect(albumBody.photos.find(photo => photo.id === "photo-1")).toMatchObject({
-			thumbnail: { url: "/api/photos/photo-1/thumbnail" },
-			preview: { url: "/api/photos/photo-1/preview" },
+			thumbnail: { url: "/?action=thumbnail&photo=photo-1" },
+			preview: { url: "/?action=preview&photo=photo-1" },
 		});
 		const eventBody = JSON.stringify({ photoIds: ["photo-1"] });
 		const eventHeaders = {
@@ -243,7 +249,7 @@ describe("photo gallery in the Workers runtime", () => {
 		};
 		expect(
 			(
-				await SELF.fetch("https://gallery.test/api/events", {
+				await SELF.fetch("https://gallery.test/?action=events", {
 					method: "POST",
 					headers: eventHeaders,
 					body: eventBody,
@@ -252,7 +258,7 @@ describe("photo gallery in the Workers runtime", () => {
 		).toBe(200);
 		expect(
 			(
-				await SELF.fetch("https://gallery.test/api/events", {
+				await SELF.fetch("https://gallery.test/?action=events", {
 					method: "POST",
 					headers: eventHeaders,
 					body: eventBody,
@@ -266,17 +272,18 @@ describe("photo gallery in the Workers runtime", () => {
 				}>()
 			)?.opens,
 		).toBe(1);
-		const media = await SELF.fetch("https://gallery.test/api/photos/photo-1/preview", { headers: { cookie } });
+		const media = await SELF.fetch("https://gallery.test/?action=preview&photo=photo-1", { headers: { cookie } });
 		expect(media.status).toBe(200);
 		expect(
-			(await SELF.fetch("https://gallery.test/api/photos/photo-1/preview/extra", { headers: { cookie } })).status,
+			(await SELF.fetch("https://gallery.test/?action=preview&photo=photo-1/extra", { headers: { cookie } }))
+				.status,
 		).toBe(404);
 		const blocked = await SELF.fetch(
-			"https://gallery.test/api/photos/photo-1/download?format=full&requestId=11111111-1111-4111-8111-111111111111",
+			"https://gallery.test/?action=download&photo=photo-1&format=full&requestId=11111111-1111-4111-8111-111111111111",
 			{ headers: { cookie } },
 		);
 		expect(blocked.status).toBe(428);
-		const acknowledged = await SELF.fetch("https://gallery.test/api/licence/acknowledge", {
+		const acknowledged = await SELF.fetch("https://gallery.test/?action=licence", {
 			method: "POST",
 			headers: {
 				cookie,
@@ -288,42 +295,42 @@ describe("photo gallery in the Workers runtime", () => {
 		});
 		expect(acknowledged.status).toBe(200);
 		const download = await SELF.fetch(
-			"https://gallery.test/api/photos/photo-1/download?format=full&requestId=11111111-1111-4111-8111-111111111111",
+			"https://gallery.test/?action=download&photo=photo-1&format=full&requestId=11111111-1111-4111-8111-111111111111",
 			{ headers: { cookie } },
 		);
 		expect(download.status).toBe(200);
 		expect(
 			(
 				await SELF.fetch(
-					"https://gallery.test/api/photos/photo-1/download/extra?format=full&requestId=11111111-1111-4111-8111-111111111111",
+					"https://gallery.test/?action=download&photo=photo-1/extra?format=full&requestId=11111111-1111-4111-8111-111111111111",
 					{ headers: { cookie } },
 				)
 			).status,
 		).toBe(404);
 		const invalidRange = await SELF.fetch(
-			"https://gallery.test/api/photos/photo-1/download?format=full&requestId=33333333-3333-4333-8333-333333333333",
+			"https://gallery.test/?action=download&photo=photo-1&format=full&requestId=33333333-3333-4333-8333-333333333333",
 			{ headers: { cookie, range: "bytes=99-100" } },
 		);
 		expect(invalidRange.status).toBe(416);
 		const suffixRange = await SELF.fetch(
-			"https://gallery.test/api/photos/photo-1/download?format=full&requestId=55555555-5555-4555-8555-555555555555",
+			"https://gallery.test/?action=download&photo=photo-1&format=full&requestId=55555555-5555-4555-8555-555555555555",
 			{ headers: { cookie, range: "bytes=-2" } },
 		);
 		expect(suffixRange.status).toBe(206);
 		expect(suffixRange.headers.get("content-range")).toBe("bytes 2-3/4");
 		expect((await suffixRange.arrayBuffer()).byteLength).toBe(2);
 		const ifRangeMismatch = await SELF.fetch(
-			"https://gallery.test/api/photos/photo-1/download?format=full&requestId=66666666-6666-4666-8666-666666666666",
+			"https://gallery.test/?action=download&photo=photo-1&format=full&requestId=66666666-6666-4666-8666-666666666666",
 			{ headers: { cookie, range: "bytes=0-1", "if-range": '"stale-etag"' } },
 		);
 		expect(ifRangeMismatch.status).toBe(200);
 		expect((await ifRangeMismatch.arrayBuffer()).byteLength).toBe(4);
 		const crossPhotoRequestId = await SELF.fetch(
-			"https://gallery.test/api/photos/photo-2/download?format=full&requestId=11111111-1111-4111-8111-111111111111",
+			"https://gallery.test/?action=download&photo=photo-2&format=full&requestId=11111111-1111-4111-8111-111111111111",
 			{ headers: { cookie } },
 		);
 		expect(crossPhotoRequestId.status).toBe(409);
-		const removed = await SELF.fetch("https://gallery.test/api/photos/photo-1/removal-requests", {
+		const removed = await SELF.fetch("https://gallery.test/?action=remove&photo=photo-1", {
 			method: "POST",
 			headers: {
 				cookie,
@@ -339,7 +346,7 @@ describe("photo gallery in the Workers runtime", () => {
 		expect(removed.status).toBe(202);
 		expect(
 			(
-				await SELF.fetch("https://gallery.test/api/photos/photo-1/removal-requests/extra", {
+				await SELF.fetch("https://gallery.test/?action=remove&photo=photo-1/extra", {
 					method: "POST",
 					headers: {
 						cookie,
@@ -355,13 +362,13 @@ describe("photo gallery in the Workers runtime", () => {
 			"SELECT payload_json as payload FROM notification_outbox WHERE kind='removal' ORDER BY created_at DESC LIMIT 1",
 		).first<{ payload: string }>();
 		expect((JSON.parse(removalNotice?.payload ?? "{}") as { text: string }).text).toContain("Restore / Restaurer");
-		const hidden = await SELF.fetch("https://gallery.test/api/photos/photo-1/preview", { headers: { cookie } });
+		const hidden = await SELF.fetch("https://gallery.test/?action=preview&photo=photo-1", { headers: { cookie } });
 		expect(hidden.status).toBe(404);
 		const firstCase = (await removed.json()) as { caseId: string };
 		expect((JSON.parse(removalNotice?.payload ?? "{}") as { text: string }).text).toContain(
 			`https://gallery.test/restore?case=${firstCase.caseId}&version=2`,
 		);
-		const duplicate = await SELF.fetch("https://gallery.test/api/photos/photo-1/removal-requests", {
+		const duplicate = await SELF.fetch("https://gallery.test/?action=remove&photo=photo-1", {
 			method: "POST",
 			headers: {
 				cookie,
@@ -383,17 +390,23 @@ describe("photo gallery in the Workers runtime", () => {
 		).toMatchObject({ status: "quarantined", version: 2 });
 		const admin = await accessFixture();
 		try {
-			const forgedAdmin = await SELF.fetch(`https://gallery.test/api/restore/${firstCase.caseId}?version=2`, {
-				headers: { "cf-access-jwt-assertion": `${admin.token.split(".").slice(0, 2).join(".")}.invalid` },
-			});
+			const forgedAdmin = await SELF.fetch(
+				`https://gallery.test/restore?action=case&case=${firstCase.caseId}&version=2`,
+				{
+					headers: { "cf-access-jwt-assertion": `${admin.token.split(".").slice(0, 2).join(".")}.invalid` },
+				},
+			);
 			expect(forgedAdmin.status).toBe(403);
-			const missing = await SELF.fetch("https://gallery.test/api/restore/missing-case?version=2", {
+			const missing = await SELF.fetch("https://gallery.test/restore?action=case&case=missing-case&version=2", {
 				headers: { "cf-access-jwt-assertion": admin.token },
 			});
 			expect(missing.status).toBe(404);
-			const restoreGet = await SELF.fetch(`https://gallery.test/api/restore/${firstCase.caseId}?version=2`, {
-				headers: { "cf-access-jwt-assertion": admin.token },
-			});
+			const restoreGet = await SELF.fetch(
+				`https://gallery.test/restore?action=case&case=${firstCase.caseId}&version=2`,
+				{
+					headers: { "cf-access-jwt-assertion": admin.token },
+				},
+			);
 			expect(restoreGet.status).toBe(200);
 			const restoreBody = (await restoreGet.json()) as {
 				filename: string;
@@ -409,15 +422,21 @@ describe("photo gallery in the Workers runtime", () => {
 				status: "pending",
 			});
 			expect(restoreBody.csrfToken).toBeTruthy();
-			const staleGet = await SELF.fetch(`https://gallery.test/api/restore/${firstCase.caseId}?version=1`, {
-				headers: { "cf-access-jwt-assertion": admin.token },
-			});
+			const staleGet = await SELF.fetch(
+				`https://gallery.test/restore?action=case&case=${firstCase.caseId}&version=1`,
+				{
+					headers: { "cf-access-jwt-assertion": admin.token },
+				},
+			);
 			expect(((await staleGet.json()) as { canRestore: boolean }).canRestore).toBe(false);
 			expect(
 				(
-					await SELF.fetch(`https://gallery.test/api/restore/${firstCase.caseId}/extra?version=2`, {
-						headers: { "cf-access-jwt-assertion": admin.token },
-					})
+					await SELF.fetch(
+						`https://gallery.test/restore?action=case&case=${firstCase.caseId}/extra?version=2`,
+						{
+							headers: { "cf-access-jwt-assertion": admin.token },
+						},
+					)
 				).status,
 			).toBe(404);
 			expect(
@@ -427,7 +446,7 @@ describe("photo gallery in the Workers runtime", () => {
 					})
 				).status,
 			).toBe(404);
-			const invalidCsrf = await SELF.fetch(`https://gallery.test/api/restore/${firstCase.caseId}`, {
+			const invalidCsrf = await SELF.fetch(`https://gallery.test/restore?action=case&case=${firstCase.caseId}`, {
 				method: "POST",
 				headers: {
 					"cf-access-jwt-assertion": admin.token,
@@ -438,7 +457,7 @@ describe("photo gallery in the Workers runtime", () => {
 				body: JSON.stringify({ expectedVersion: 2 }),
 			});
 			expect(invalidCsrf.status).toBe(403);
-			const staleRestore = await SELF.fetch(`https://gallery.test/api/restore/${firstCase.caseId}`, {
+			const staleRestore = await SELF.fetch(`https://gallery.test/restore?action=case&case=${firstCase.caseId}`, {
 				method: "POST",
 				headers: {
 					"cf-access-jwt-assertion": admin.token,
@@ -449,7 +468,7 @@ describe("photo gallery in the Workers runtime", () => {
 				body: JSON.stringify({ expectedVersion: 1 }),
 			});
 			expect(staleRestore.status).toBe(409);
-			const restore = await SELF.fetch(`https://gallery.test/api/restore/${firstCase.caseId}`, {
+			const restore = await SELF.fetch(`https://gallery.test/restore?action=case&case=${firstCase.caseId}`, {
 				method: "POST",
 				headers: {
 					"cf-access-jwt-assertion": admin.token,
@@ -478,7 +497,7 @@ describe("photo gallery in the Workers runtime", () => {
 					.bind(firstCase.caseId)
 					.first(),
 			).toMatchObject({ reason: "Restoration approved from removal notification" });
-			const repeated = await SELF.fetch(`https://gallery.test/api/restore/${firstCase.caseId}`, {
+			const repeated = await SELF.fetch(`https://gallery.test/restore?action=case&case=${firstCase.caseId}`, {
 				method: "POST",
 				headers: {
 					"cf-access-jwt-assertion": admin.token,
@@ -492,7 +511,7 @@ describe("photo gallery in the Workers runtime", () => {
 		} finally {
 			admin.restore();
 		}
-		const invalidLogout = await SELF.fetch("https://gallery.test/api/auth/logout", {
+		const invalidLogout = await SELF.fetch("https://gallery.test/?action=logout", {
 			method: "POST",
 			headers: {
 				cookie,
@@ -502,7 +521,7 @@ describe("photo gallery in the Workers runtime", () => {
 			},
 		});
 		expect(invalidLogout.status).toBe(403);
-		const validLogout = await SELF.fetch("https://gallery.test/api/auth/logout", {
+		const validLogout = await SELF.fetch("https://gallery.test/?action=logout", {
 			method: "POST",
 			headers: {
 				cookie,
@@ -512,12 +531,12 @@ describe("photo gallery in the Workers runtime", () => {
 			},
 		});
 		expect(validLogout.status).toBe(200);
-		expect((await SELF.fetch("https://gallery.test/api/album", { headers: { cookie } })).status).toBe(401);
+		expect((await SELF.fetch("https://gallery.test/?action=album", { headers: { cookie } })).status).toBe(401);
 	});
 
 	it("blocks restoration while another pending case exists for the photo", async () => {
 		const code = await requestCode();
-		const verified = await SELF.fetch("https://gallery.test/api/auth/verify", {
+		const verified = await SELF.fetch("https://gallery.test/?action=verify-code", {
 			method: "POST",
 			headers: { origin: "https://gallery.test", "content-type": "application/json" },
 			body: JSON.stringify({ email, code }),
@@ -525,7 +544,7 @@ describe("photo gallery in the Workers runtime", () => {
 		const cookie = verified.headers.get("set-cookie")?.split(";")[0] ?? "";
 		const session = (await verified.json()) as { csrfToken: string };
 		const submit = (requestId: string) =>
-			SELF.fetch("https://gallery.test/api/photos/photo-1/removal-requests", {
+			SELF.fetch("https://gallery.test/?action=remove&photo=photo-1", {
 				method: "POST",
 				headers: {
 					cookie,
@@ -542,13 +561,13 @@ describe("photo gallery in the Workers runtime", () => {
 		const firstCase = ((await first.json()) as { caseId: string }).caseId;
 		const admin = await accessFixture();
 		try {
-			const state = await SELF.fetch(`https://gallery.test/api/restore/${firstCase}?version=3`, {
+			const state = await SELF.fetch(`https://gallery.test/restore?action=case&case=${firstCase}&version=3`, {
 				headers: { "cf-access-jwt-assertion": admin.token },
 			});
 			expect(state.status).toBe(200);
 			const stateBody = (await state.json()) as { canRestore: boolean; csrfToken: string };
 			expect(stateBody.canRestore).toBe(false);
-			const restore = await SELF.fetch(`https://gallery.test/api/restore/${firstCase}`, {
+			const restore = await SELF.fetch(`https://gallery.test/restore?action=case&case=${firstCase}`, {
 				method: "POST",
 				headers: {
 					"cf-access-jwt-assertion": admin.token,
@@ -570,14 +589,14 @@ describe("photo gallery in the Workers runtime", () => {
 
 	it("fails closed when the D1 licence version differs from configuration", async () => {
 		const code = await requestCode();
-		const verified = await SELF.fetch("https://gallery.test/api/auth/verify", {
+		const verified = await SELF.fetch("https://gallery.test/?action=verify-code", {
 			method: "POST",
 			headers: { origin: "https://gallery.test", "content-type": "application/json" },
 			body: JSON.stringify({ email, code }),
 		});
 		const cookie = verified.headers.get("set-cookie")?.split(";")[0] ?? "";
 		await env.DB.prepare("UPDATE licence_versions SET version='2026-10-07' WHERE current=1").run();
-		const album = await SELF.fetch("https://gallery.test/api/album", { headers: { cookie } });
+		const album = await SELF.fetch("https://gallery.test/?action=album", { headers: { cookie } });
 		expect(album.status).toBe(500);
 		expect(await album.json()).toEqual({ error: "The request could not be completed." });
 	});
@@ -592,7 +611,7 @@ describe("photo gallery in the Workers runtime", () => {
 			},
 		} as unknown as Env;
 		const response = await worker.fetch(
-			new Request("https://gallery.test/api/auth/request", {
+			new Request("https://gallery.test/?action=request-code", {
 				method: "POST",
 				headers: { origin: "https://gallery.test", "content-type": "application/json" },
 				body: JSON.stringify({ email: "eligible@example.org", language: "en" }),
@@ -616,7 +635,7 @@ describe("photo gallery in the Workers runtime", () => {
 				},
 			} as unknown as Env;
 			const response = await worker.fetch(
-				new Request("https://gallery.test/api/restore/missing-case?version=2", {
+				new Request("https://gallery.test/restore?action=case&case=missing-case&version=2", {
 					headers: { "cf-access-jwt-assertion": fixture.token },
 				}),
 				failingEnv,
@@ -634,7 +653,7 @@ describe("photo gallery in the Workers runtime", () => {
 		await env.DB.prepare("UPDATE code_challenges SET expires_at=0,resend_after=0 WHERE email_hash=?")
 			.bind(await hmac(email))
 			.run();
-		const expired = await SELF.fetch("https://gallery.test/api/auth/verify", {
+		const expired = await SELF.fetch("https://gallery.test/?action=verify-code", {
 			method: "POST",
 			headers: { origin: "https://gallery.test", "content-type": "application/json" },
 			body: JSON.stringify({ email, code: firstCode }),
@@ -643,14 +662,14 @@ describe("photo gallery in the Workers runtime", () => {
 		const currentCode = await requestCode();
 		const wrong = "00000000" === currentCode ? "99999999" : "00000000";
 		for (let attempt = 0; attempt < 5; attempt += 1) {
-			const response = await SELF.fetch("https://gallery.test/api/auth/verify", {
+			const response = await SELF.fetch("https://gallery.test/?action=verify-code", {
 				method: "POST",
 				headers: { origin: "https://gallery.test", "content-type": "application/json" },
 				body: JSON.stringify({ email, code: wrong }),
 			});
 			expect(response.status).toBe(401);
 		}
-		const locked = await SELF.fetch("https://gallery.test/api/auth/verify", {
+		const locked = await SELF.fetch("https://gallery.test/?action=verify-code", {
 			method: "POST",
 			headers: { origin: "https://gallery.test", "content-type": "application/json" },
 			body: JSON.stringify({ email, code: currentCode }),
@@ -660,7 +679,7 @@ describe("photo gallery in the Workers runtime", () => {
 
 	it("applies same-photo removal quotas atomically while preserving idempotent retries", async () => {
 		const code = await requestCode();
-		const verified = await SELF.fetch("https://gallery.test/api/auth/verify", {
+		const verified = await SELF.fetch("https://gallery.test/?action=verify-code", {
 			method: "POST",
 			headers: { origin: "https://gallery.test", "content-type": "application/json" },
 			body: JSON.stringify({ email, code }),
@@ -668,7 +687,7 @@ describe("photo gallery in the Workers runtime", () => {
 		const cookie = verified.headers.get("set-cookie")?.split(";")[0] ?? "";
 		const session = (await verified.json()) as { csrfToken: string };
 		const submit = (requestId: string, explanation: string) =>
-			SELF.fetch("https://gallery.test/api/photos/photo-1/removal-requests", {
+			SELF.fetch("https://gallery.test/?action=remove&photo=photo-1", {
 				method: "POST",
 				headers: {
 					cookie,
@@ -758,13 +777,13 @@ describe("photo gallery in the Workers runtime", () => {
 
 	it("consumes a successful OTP exactly once", async () => {
 		const code = await requestCode();
-		const verified = await SELF.fetch("https://gallery.test/api/auth/verify", {
+		const verified = await SELF.fetch("https://gallery.test/?action=verify-code", {
 			method: "POST",
 			headers: { origin: "https://gallery.test", "content-type": "application/json" },
 			body: JSON.stringify({ email, code }),
 		});
 		expect(verified.status).toBe(200);
-		const reused = await SELF.fetch("https://gallery.test/api/auth/verify", {
+		const reused = await SELF.fetch("https://gallery.test/?action=verify-code", {
 			method: "POST",
 			headers: { origin: "https://gallery.test", "content-type": "application/json" },
 			body: JSON.stringify({ email, code }),
@@ -784,7 +803,7 @@ describe("photo gallery in the Workers runtime", () => {
 
 	it("serializes concurrent OTP requests through the cooldown and budget gate", async () => {
 		const request = () =>
-			SELF.fetch("https://gallery.test/api/auth/request", {
+			SELF.fetch("https://gallery.test/?action=request-code", {
 				method: "POST",
 				headers: { origin: "https://gallery.test", "content-type": "application/json" },
 				body: JSON.stringify({ email, language: "en" }),
@@ -809,14 +828,14 @@ describe("photo gallery in the Workers runtime", () => {
 
 	it("rejects a concurrent download that loses requestId binding", async () => {
 		const code = await requestCode();
-		const verified = await SELF.fetch("https://gallery.test/api/auth/verify", {
+		const verified = await SELF.fetch("https://gallery.test/?action=verify-code", {
 			method: "POST",
 			headers: { origin: "https://gallery.test", "content-type": "application/json" },
 			body: JSON.stringify({ email, code }),
 		});
 		const cookie = verified.headers.get("set-cookie")?.split(";")[0] ?? "";
 		const session = (await verified.json()) as { csrfToken: string };
-		const acknowledged = await SELF.fetch("https://gallery.test/api/licence/acknowledge", {
+		const acknowledged = await SELF.fetch("https://gallery.test/?action=licence", {
 			method: "POST",
 			headers: {
 				cookie,
@@ -829,7 +848,7 @@ describe("photo gallery in the Workers runtime", () => {
 		expect(acknowledged.status).toBe(200);
 		const requestId = "abababab-abab-4aba-8aba-abababababab";
 		const fetchDownload = (photoId: string) =>
-			SELF.fetch(`https://gallery.test/api/photos/${photoId}/download?format=full&requestId=${requestId}`, {
+			SELF.fetch(`https://gallery.test/?action=download&photo=${photoId}&format=full&requestId=${requestId}`, {
 				headers: { cookie },
 			});
 		const [first, second] = await Promise.all([fetchDownload("photo-1"), fetchDownload("photo-2")]);
@@ -845,7 +864,7 @@ describe("photo gallery in the Workers runtime", () => {
 
 	it("keeps anonymous activity aggregates after download records expire", async () => {
 		const code = await requestCode();
-		const verified = await SELF.fetch("https://gallery.test/api/auth/verify", {
+		const verified = await SELF.fetch("https://gallery.test/?action=verify-code", {
 			method: "POST",
 			headers: { origin: "https://gallery.test", "content-type": "application/json" },
 			body: JSON.stringify({ email, code }),
@@ -860,7 +879,7 @@ describe("photo gallery in the Workers runtime", () => {
 		};
 		expect(
 			(
-				await SELF.fetch("https://gallery.test/api/licence/acknowledge", {
+				await SELF.fetch("https://gallery.test/?action=licence", {
 					method: "POST",
 					headers: headers,
 					body: JSON.stringify({ version: "2026-10-06" }),
@@ -874,7 +893,7 @@ describe("photo gallery in the Workers runtime", () => {
 			expect(
 				(
 					await SELF.fetch(
-						`https://gallery.test/api/photos/photo-1/download?format=${format}&requestId=${requestId}`,
+						`https://gallery.test/?action=download&photo=photo-1&format=${format}&requestId=${requestId}`,
 						{ headers: { cookie } },
 					)
 				).status,
@@ -882,7 +901,7 @@ describe("photo gallery in the Workers runtime", () => {
 		}
 		expect(
 			(
-				await SELF.fetch("https://gallery.test/api/events", {
+				await SELF.fetch("https://gallery.test/?action=events", {
 					method: "POST",
 					headers,
 					body: JSON.stringify({ photoIds: ["photo-1"], albumVisit: true }),
@@ -899,7 +918,7 @@ describe("photo gallery in the Workers runtime", () => {
 			},
 		} as ExecutionContext);
 		await Promise.all(waits);
-		const album = await SELF.fetch("https://gallery.test/api/album", { headers: { cookie } });
+		const album = await SELF.fetch("https://gallery.test/?action=album", { headers: { cookie } });
 		expect(album.status).toBe(200);
 		const body = (await album.json()) as {
 			activity: { views: number; downloadRequests: number };
