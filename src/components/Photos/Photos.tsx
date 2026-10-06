@@ -659,18 +659,10 @@ function Album({
 										<button
 											className={`${styles.favourite} ${favourites.has(photo.id) ? styles.favouriteOn : ""}`}
 											onClick={() => toggleFavourite(photo.id)}
-											aria-label={
-												favourites.has(photo.id)
-													? language === "en"
-														? "Remove from favourites"
-														: "Retirer des favoris"
-													: language === "en"
-														? "Add to favourites"
-														: "Ajouter aux favoris"
-											}
+											aria-label={favourites.has(photo.id) ? t.removeFavourite : t.addFavourite}
 											aria-pressed={favourites.has(photo.id)}
 										>
-											♥
+											{favourites.has(photo.id) ? "♥" : "♡"}
 										</button>
 									</div>
 								</article>
@@ -853,9 +845,10 @@ function Viewer({
 					<button
 						className={`${styles.favouriteLarge} ${favourites.has(current.id) ? styles.favouriteOn : ""}`}
 						onClick={() => onToggleFavourite(current.id)}
+						aria-label={favourites.has(current.id) ? t.removeFavourite : t.addFavourite}
 						aria-pressed={favourites.has(current.id)}
 					>
-						♥
+						{favourites.has(current.id) ? "♥" : "♡"}
 					</button>
 				</div>
 				<div className={styles.viewerActions}>
