@@ -323,7 +323,6 @@ function Shell({
 				</div>
 			</header>
 			{children}
-			<footer className={styles.footer}>Hack the Hill III</footer>
 		</div>
 	);
 }

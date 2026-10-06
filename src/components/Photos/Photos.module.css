@@ -51,13 +51,6 @@
 .textButton:hover {
 	color: #fff9ef;
 }
-.footer {
-	padding: 2.5rem clamp(1rem, 5vw, 5rem);
-	color: var(--color-muted);
-	background: #e9e3d9;
-	font-size: 0.78rem;
-	text-align: center;
-}
 .footer a {
 	color: inherit;
 }
