@@ -2,6 +2,7 @@ import { env } from "cloudflare:workers";
 import { SELF } from "cloudflare:test";
 import { beforeEach, describe, expect, it } from "vitest";
 import worker from "../src/index";
+import { publicHighlights } from "../src/public-highlights";
 
 const email = "attendee@example.org";
 const secret = "local-test-secret-that-is-long-enough-123456";
@@ -936,4 +937,29 @@ describe("photo gallery in the Workers runtime", () => {
 		expect(body.photos.find(photo => photo.id === "photo-1")?.activity).toEqual({ views: 1, downloadRequests: 2 });
 		expect(JSON.stringify(body)).not.toContain(email);
 	});
+});
+
+it("serves only approved public previews and respects removal even with a matching ETag", async () => {
+	await reset();
+	const id = [...publicHighlights][0];
+	await env.DB.prepare(
+		"INSERT INTO photos(id,category,filename,version,status,thumbnail_key,preview_key,full_key,width,height,created_at,updated_at) SELECT ?,category,filename,version,status,thumbnail_key,preview_key,full_key,width,height,created_at,updated_at FROM photos WHERE id='photo-1'",
+	)
+		.bind(id)
+		.run();
+	await env.DB.prepare(
+		"INSERT INTO photo_variants(photo_id,format,object_key,width,height,bytes,content_type,sha256) VALUES(?,'preview','photo-1/preview',2,2,4,'image/jpeg','test-hash')",
+	)
+		.bind(id)
+		.run();
+	const url = `https://gallery.test/?action=highlight&photo=${id}`;
+	const response = await SELF.fetch(url);
+	expect(response.status).toBe(200);
+	expect(response.headers.get("cache-control")).toBe("no-store");
+	expect([...new Uint8Array(await response.arrayBuffer())]).toEqual([1, 2, 3, 4]);
+	expect((await SELF.fetch("https://gallery.test/?action=highlight&photo=photo-1")).status).toBe(404);
+	expect((await SELF.fetch(`https://gallery.test/?action=preview&photo=${id}`)).status).toBe(401);
+	expect((await SELF.fetch(`https://gallery.test/?action=download&photo=${id}&format=full`)).status).toBe(401);
+	await env.DB.prepare("UPDATE photos SET status='quarantined' WHERE id=?").bind(id).run();
+	expect((await SELF.fetch(url, { headers: { "if-none-match": '"test-hash"' } })).status).toBe(404);
 });

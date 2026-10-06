@@ -58,6 +58,10 @@ Requires an active session and CSRF token.
 
 The Worker deduplicates photo opens per session and records only daily aggregate counts. `albumVisit` increments an aggregate album-visit counter. No identity-linked browsing history is created.
 
+### `GET /?action=highlight&photo=<id>`
+
+Returns an edited preview without sign-in only for IDs in `services/photo-gallery/src/public-highlights.ts`, selected for the public event website. Other IDs return `404`. Publication status is checked on every request, including conditional requests; responses use `Cache-Control: no-store`. Full-resolution downloads remain protected.
+
 ### `GET /?action=thumbnail&photo=<id>` and `GET /?action=preview&photo=<id>`
 
 Require an active attendee session and return the corresponding published WebP/JPEG variant. The Worker rechecks publication state immediately before the R2 read, so a quarantined or withdrawn photo is no longer available even if its manifest was previously loaded. There is no public bucket URL and no full-size media endpoint at the thumbnail or preview paths.
@@ -118,6 +122,6 @@ Individual download request records remain available for 90 days for manual, own
 - The exact bilingual licence text lives in `src/shared/photo-licence.json`.
 - Frontend copy is typed in `src/locales/photos.ts`.
 - The frontend never receives the attendee roster, email hashes, R2 object keys, source editing notes, or private moderation fields.
-- The service owns dedicated D1 and R2 bindings and has no public media fallback.
+- The service owns dedicated D1 and R2 bindings and has no public media fallback beyond the explicit website-highlight preview allowlist.
 - Protected JSON and downloads are private and non-cacheable. Attendee media may use only the short private revalidation policy returned by the Worker.
 - Scheduled cleanup retains individual download requests for 90 days, keeps unresolved cases, and removes resolved case/report/audit history after one year.
