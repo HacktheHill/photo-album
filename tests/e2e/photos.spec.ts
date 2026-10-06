@@ -126,14 +126,7 @@ test("email code request supports paste and verifies through the API contract", 
 				})),
 		)
 		.toEqual({ complete: true, naturalWidth: 1 });
-	await expect
-		.poll(() =>
-			page.locator('[class*="heroPhoto"] img').evaluate(image => ({
-				complete: (image as HTMLImageElement).complete,
-				naturalWidth: (image as HTMLImageElement).naturalWidth,
-			})),
-		)
-		.toEqual({ complete: true, naturalWidth: 1 });
+	await expect(page.locator('[class*="heroPhoto"]')).toHaveCount(0);
 	await page.getByRole("button", { name: "Français" }).click();
 	await expect(page.getByRole("heading", { name: "Album photo" })).toBeVisible();
 	await expect(page.getByRole("searchbox")).toHaveCount(0);
@@ -286,9 +279,13 @@ test("standalone album stays usable on mobile without redundant controls", async
 	await routeAttendee(page);
 	await page.route("**/?action=events", route => route.fulfill({ json: {} }));
 	await page.goto("/");
-	await expect(page.getByRole("heading", { name: "Photo album" })).toBeVisible();
+	await expect(page.locator("header").getByRole("heading", { name: "Photo album" })).toBeVisible();
 	await expect(page.locator("header").getByRole("button", { name: "Sign out" })).toBeVisible();
 	await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+	await page.getByRole("button", { name: "Français", exact: true }).click();
+	await expect(page.locator("header").getByRole("heading", { name: "Album photo" })).toBeVisible();
+	await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+	await page.getByRole("button", { name: "English", exact: true }).click();
 	await expect(page.getByPlaceholder("Search photos")).toHaveCount(0);
 	await page.getByRole("button", { name: /View photo: Opening ceremony 1/ }).click();
 	await expect(page.getByRole("dialog", { name: "Opening ceremony" })).toBeVisible();
