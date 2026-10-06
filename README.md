@@ -63,3 +63,7 @@ Source photos, private manifests, eligibility exports, backups and credentials s
 - [Photo pipeline](scripts/photos/README.md): derivatives, upload and complete object verification.
 
 [Database review](docs/database-review.md) covers column purpose and recommended simplifications.
+
+## Licence
+
+The code is available under the [MIT License](LICENSE). It does not cover the event photos, which are not in this repository and are governed by the [photo licence](src/shared/photo-licence.json), or the Hack the Hill logo and bundled fonts, which belong to their respective owners (Rubik is under the SIL Open Font License; Coolvetica is a Typodermic Fonts typeface).
