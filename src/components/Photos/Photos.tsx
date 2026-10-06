@@ -299,10 +299,12 @@ export default function Photos() {
 function Shell({
 	language,
 	setLanguage,
+	onSignOut,
 	children,
 }: {
 	language: Language;
 	setLanguage: (value: Language) => void;
+	onSignOut?: () => void;
 	children: ReactNode;
 }) {
 	const t = copy[language];
@@ -320,6 +322,11 @@ function Shell({
 					>
 						{t.language}
 					</button>
+					{onSignOut && (
+						<button className={styles.signOut} onClick={onSignOut}>
+							{t.signout}
+						</button>
+					)}
 				</div>
 			</header>
 			{children}
@@ -487,7 +494,6 @@ function Album({
 }) {
 	const t = copy[language];
 	const [category, setCategory] = useState<Category>("all");
-	const [query, setQuery] = useState("");
 	const sharedPhotoId = new URLSearchParams(window.location.search).get("photo");
 	const sharedPhoto = manifest.photos.find(item => item.id === sharedPhotoId) || null;
 	const [viewer, setViewer] = useState<AlbumPhoto | null>(sharedPhoto);
@@ -536,12 +542,10 @@ function Album({
 		() =>
 			manifest.photos.filter(
 				photo =>
-					(category === "all" ||
-						(category === "favourites" ? favourites.has(photo.id) : photo.category === category)) &&
-					(!query.trim() ||
-						`${photo.filename} ${photo.category}`.toLowerCase().includes(query.trim().toLowerCase())),
+					category === "all" ||
+					(category === "favourites" ? favourites.has(photo.id) : photo.category === category),
 			),
-		[manifest.photos, category, favourites, query],
+		[manifest.photos, category, favourites],
 	);
 	const toggleFavourite = (id: string) =>
 		setFavourites(previous => {
@@ -551,14 +555,11 @@ function Album({
 			return next;
 		});
 	return (
-		<Shell language={language} setLanguage={setLanguage}>
+		<Shell language={language} setLanguage={setLanguage} onSignOut={onSignOut}>
 			<main className={styles.album}>
 				<section className={styles.albumHero}>
 					<div>
 						<h1>{t.cover}</h1>
-						<button className={styles.textButton} onClick={onSignOut}>
-							{t.signout}
-						</button>
 					</div>
 					{coverPhoto ? (
 						<div className={styles.heroPhoto}>
@@ -610,20 +611,11 @@ function Album({
 								</button>
 							))}
 					</nav>
-					<label className={styles.search}>
-						<span className={styles.srOnly}>{t.search}</span>
-						<span aria-hidden="true">⌕</span>
-						<input placeholder={t.search} value={query} onChange={event => setQuery(event.target.value)} />
-					</label>
 				</div>
 				{notice && <NoticeBox notice={notice} />}
-				<p className={styles.resultCount}>
-					{filtered.length} {t.results} · {manifest.activity?.views ?? 0} {t.views} ·{" "}
-					{manifest.activity?.downloadRequests ?? 0} {t.downloadRequests}
-				</p>
 				{filtered.length ? (
 					<ul className={styles.grid}>
-						{filtered.map(photo => (
+						{filtered.map((photo, index) => (
 							<li key={photo.id}>
 								<article className={styles.photoCard}>
 									<button
@@ -636,7 +628,7 @@ function Album({
 												`/?photo=${encodeURIComponent(photo.id)}`,
 											);
 										}}
-										aria-label={`${t.view}: ${photo.filename}`}
+										aria-label={`${t.view}: ${photoLabel(photo.category, language)} ${index + 1}`}
 									>
 										<img
 											src={displayUrl(photo.thumbnail.url)}
@@ -650,7 +642,6 @@ function Album({
 									<div className={styles.cardMeta}>
 										<div>
 											<strong>{photoLabel(photo.category, language)}</strong>
-											<span>{photo.filename}</span>
 											<span>
 												{photo.activity?.views ?? 0} {t.views} ·{" "}
 												{photo.activity?.downloadRequests ?? 0} {t.downloadRequests}
@@ -687,7 +678,6 @@ function Album({
 					onClose={closeViewer}
 					onTerms={setTerms}
 					onRemoval={setRemoval}
-					setNotice={setNotice}
 				/>
 			)}
 			{terms && (
@@ -726,7 +716,6 @@ function Viewer({
 	onClose,
 	onTerms,
 	onRemoval,
-	setNotice,
 }: {
 	photo: AlbumPhoto;
 	photos: AlbumPhoto[];
@@ -737,7 +726,6 @@ function Viewer({
 	onClose: () => void;
 	onTerms: (p: AlbumPhoto) => void;
 	onRemoval: (p: AlbumPhoto) => void;
-	setNotice: (n: Notice) => void;
 }) {
 	const t = copy[language];
 	const initialIndex = Math.max(
@@ -806,7 +794,9 @@ function Viewer({
 				onTouchEnd={handleTouchEnd}
 			>
 				<div className={styles.viewerTop}>
-					<span className={styles.eyebrow}>{photoLabel(current.category, language)}</span>
+					<h2 id="viewer-title" className={styles.viewerCategory}>
+						{photoLabel(current.category, language)}
+					</h2>
 					<button className={styles.iconButton} onClick={onClose} aria-label={t.close}>
 						×
 					</button>
@@ -836,7 +826,6 @@ function Viewer({
 				</div>
 				<div className={styles.viewerInfo}>
 					<div>
-						<h2 id="viewer-title">{current.filename}</h2>
 						<p>
 							{current.width} × {current.height} px ·{" "}
 							{formatBytes(current.downloads.full.bytes, language)}
@@ -855,35 +844,10 @@ function Viewer({
 					<button className={styles.button} onClick={() => onTerms(current)}>
 						↓ {t.download}
 					</button>
-					<button
-						className={styles.outlineButton}
-						onClick={() => {
-							const link = `${window.location.origin}/?photo=${encodeURIComponent(current.id)}`;
-							void navigator.clipboard
-								?.writeText(link)
-								.then(() => setNotice({ kind: "success", text: t.copied }))
-								.catch(() => setNotice({ kind: "info", text: link }));
-						}}
-					>
-						{t.share}
-					</button>
 					<button className={styles.textButton} onClick={() => onRemoval(current)}>
 						{t.removal}
 					</button>
 				</div>
-				<details className={styles.details}>
-					<summary>{t.details}</summary>
-					<dl>
-						<dt>{t.filename}</dt>
-						<dd>{current.filename}</dd>
-						<dt>{t.dimensions}</dt>
-						<dd>
-							{current.width} × {current.height}px
-						</dd>
-						<dt>{t.size}</dt>
-						<dd>{formatBytes(current.downloads.full.bytes, language)}</dd>
-					</dl>
-				</details>
 			</div>
 		</div>
 	);

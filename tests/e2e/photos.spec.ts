@@ -134,10 +134,9 @@ test("email code request supports paste and verifies through the API contract", 
 			})),
 		)
 		.toEqual({ complete: true, naturalWidth: 1 });
-	await page.locator('input[placeholder="Search photos"]').fill("IMG");
 	await page.getByRole("button", { name: "Français" }).click();
 	await expect(page.getByRole("heading", { name: "Album photo" })).toBeVisible();
-	await expect(page.locator('input[placeholder="Rechercher des photos"]')).toHaveValue("IMG");
+	await expect(page.getByRole("searchbox")).toHaveCount(0);
 	expect(eventBodies.filter(event => event.albumVisit)).toHaveLength(1);
 });
 
@@ -147,7 +146,7 @@ test("download shows complete terms in the selected language and cancellation ma
 	await routeAttendee(page);
 	await page.route("**/?action=events", route => route.fulfill({ json: {} }));
 	await page.goto("/");
-	await page.getByRole("button", { name: /View photo: IMG_0001/ }).click();
+	await page.getByRole("button", { name: /View photo: Opening ceremony 1/ }).click();
 	await expect(page.getByRole("dialog")).toBeVisible();
 	let downloadRequests = 0;
 	page.on("request", request => {
@@ -175,12 +174,12 @@ test("download shows complete terms in the selected language and cancellation ma
 	await expectTopDialogContainsFocus(page);
 	await page.keyboard.press("Escape");
 	await expect(page.getByRole("dialog")).toHaveCount(1); // the viewer remains beneath the licence dialog
-	await expect(page.locator("#viewer-title")).toHaveText("IMG_0001.jpg");
+	await expect(page.locator("#viewer-title")).toHaveText("Opening ceremony");
 	await page.keyboard.press("Escape");
 	await expect(page.getByRole("dialog")).toHaveCount(0);
 	expect(downloadRequests).toBe(0);
 	await page.getByRole("button", { name: "Français", exact: true }).click();
-	await page.getByRole("button", { name: /Voir la photo: IMG_0001/ }).click();
+	await page.getByRole("button", { name: /Voir la photo: Cérémonie d’ouverture 1/ }).click();
 	await page.getByRole("button", { name: /Télécharger/ }).click();
 	const frenchTerms = page.getByRole("dialog", { name: "Conditions d’utilisation et de licence" });
 	await expect(frenchTerms.getByRole("heading", { level: 3 })).toHaveText([
@@ -200,7 +199,7 @@ test("removal dialog traps focus and Escape restores the viewer", async ({ page 
 	await routeAttendee(page);
 	await page.route("**/?action=events", route => route.fulfill({ json: {} }));
 	await page.goto("/");
-	await page.getByRole("button", { name: /View photo: IMG_0001/ }).click();
+	await page.getByRole("button", { name: /View photo: Opening ceremony 1/ }).click();
 	await page.getByRole("button", { name: "Request removal" }).click();
 	await expect(page.getByRole("heading", { name: "Request removal" })).toBeVisible();
 	await page.keyboard.press("Tab");
@@ -209,14 +208,14 @@ test("removal dialog traps focus and Escape restores the viewer", async ({ page 
 	await expectTopDialogContainsFocus(page);
 	await page.keyboard.press("Escape");
 	await expect(page.getByRole("dialog")).toHaveCount(1);
-	await expect(page.locator("#viewer-title")).toHaveText("IMG_0001.jpg");
+	await expect(page.locator("#viewer-title")).toHaveText("Opening ceremony");
 });
 
 test("viewer keeps the full preview composition and moves with keyboard", async ({ page }) => {
 	await routeAttendee(page);
 	await page.route("**/?action=events", route => route.fulfill({ json: {} }));
 	await page.goto("/");
-	await page.getByRole("button", { name: /View photo: IMG_0001/ }).click();
+	await page.getByRole("button", { name: /View photo: Opening ceremony 1/ }).click();
 	const viewerImage = page.getByRole("dialog").locator("img");
 	await expect(viewerImage).toHaveAttribute("src", "/?action=preview&photo=opening-001");
 	await expect(viewerImage).toHaveAttribute("width", "1600");
@@ -229,7 +228,7 @@ test("viewer keeps the full preview composition and moves with keyboard", async 
 		)
 		.toEqual({ complete: true, naturalWidth: 1 });
 	await page.keyboard.press("ArrowRight");
-	await expect(page.locator("#viewer-title")).toHaveText("IMG_0002.jpg");
+	await expect(page.locator("#viewer-title")).toHaveText("Closing ceremony");
 	await page.keyboard.press("Escape");
 	await expect(page.getByRole("dialog")).toHaveCount(0);
 });
@@ -240,7 +239,7 @@ test("unavailable shared photo is neutral and corrupted favourites do not break 
 	await page.goto("/?photo=hidden-or-missing");
 	await expect(page.getByRole("status")).toContainText("This photo is no longer available.");
 	await expect(page.getByRole("heading", { name: "Photo album" })).toBeVisible();
-	await expect(page.getByText("IMG_0001.jpg")).toBeVisible();
+	await expect(page.getByRole("button", { name: /View photo: Opening ceremony 1/ })).toBeVisible();
 });
 
 test("returning to a visible album closes a withdrawn viewer without remounting the shell", async ({ page }) => {
@@ -264,7 +263,7 @@ test("returning to a visible album closes a withdrawn viewer without remounting 
 		}),
 	);
 	await page.goto("/");
-	await page.getByRole("button", { name: /View photo: IMG_0001/ }).click();
+	await page.getByRole("button", { name: /View photo: Opening ceremony 1/ }).click();
 	revoked = true;
 	await page.evaluate(() => document.dispatchEvent(new Event("visibilitychange")));
 	await expect(page.getByRole("status")).toContainText("This photo is no longer available.");
@@ -282,29 +281,20 @@ test("logout failure keeps the authenticated album and offers the same retry act
 	await expect(page.getByRole("button", { name: "Sign out" })).toBeVisible();
 });
 
-test("standalone root works on mobile and copies share links from its current origin", async ({ page }) => {
+test("standalone album stays usable on mobile without redundant controls", async ({ page }) => {
 	await page.setViewportSize({ width: 320, height: 740 });
-	await page.addInitScript(() => {
-		Object.defineProperty(navigator, "clipboard", {
-			value: {
-				writeText: async (value: string) => {
-					(window as unknown as { copiedPhotoLink: string }).copiedPhotoLink = value;
-				},
-			},
-		});
-	});
 	await routeAttendee(page);
 	await page.route("**/?action=events", route => route.fulfill({ json: {} }));
 	await page.goto("/");
 	await expect(page.getByRole("heading", { name: "Photo album" })).toBeVisible();
+	await expect(page.locator("header").getByRole("button", { name: "Sign out" })).toBeVisible();
 	await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
-	await page.getByRole("button", { name: "View photo" }).first().click();
-	await page.getByRole("button", { name: "Copy share link" }).click();
-	const copied = await page.evaluate(() => (window as unknown as { copiedPhotoLink: string }).copiedPhotoLink);
-	const expected = new URL("/?photo=opening-001", page.url()).href;
-	expect(copied).toBe(expected);
-	await page.goto(copied);
-	await expect(page.getByRole("dialog", { name: "IMG_0001.jpg" })).toBeVisible();
+	await expect(page.getByPlaceholder("Search photos")).toHaveCount(0);
+	await page.getByRole("button", { name: /View photo: Opening ceremony 1/ }).click();
+	await expect(page.getByRole("dialog", { name: "Opening ceremony" })).toBeVisible();
+	await expect(page.getByRole("button", { name: "Copy share link" })).toHaveCount(0);
+	await expect(page.getByText("Photo details", { exact: true })).toHaveCount(0);
+	await expect(page.getByText("IMG_0001.jpg", { exact: true })).toHaveCount(0);
 });
 
 test("restoration is a read-only email arrival followed by an explicit protected action", async ({ page }) => {
@@ -370,7 +360,7 @@ test("a failed removal preserves the explanation and idempotent retry", async ({
 		await route.fulfill({ status: 500, json: { error: "Unavailable" } });
 	});
 	await page.goto("/");
-	await page.getByRole("button", { name: /View photo: IMG_0001/ }).click();
+	await page.getByRole("button", { name: /View photo: Opening ceremony 1/ }).click();
 	await page.getByRole("button", { name: "Request removal", exact: true }).click();
 	await page.locator("#removal-explanation").fill("Please remove this photo of me.");
 	await page.getByRole("button", { name: "Temporarily hide photo and send request", exact: true }).click();
