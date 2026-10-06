@@ -49,13 +49,6 @@ function storageWrite(key: string, value: string) {
 		/* Optional preferences stay in memory. */
 	}
 }
-function storageRemove(key: string) {
-	try {
-		localStorage.removeItem(key);
-	} catch {
-		/* Session revocation is enforced server-side. */
-	}
-}
 function languageFromStorage(): Language {
 	return storageRead("hth-photo-language") === "fr" ? "fr" : "en";
 }
@@ -87,6 +80,37 @@ function isTopmostDialog(node: HTMLElement | null) {
 	return dialogs[dialogs.length - 1] === node;
 }
 
+let modalScrollLocks = 0;
+let restorePageScroll: (() => void) | undefined;
+
+function lockPageScroll() {
+	if (modalScrollLocks++ === 0) {
+		const body = document.body;
+		const saved = body.getAttribute("style");
+		const rootOverflow = document.documentElement.style.overflow;
+		const { scrollX, scrollY } = window;
+		const gutter = window.innerWidth - document.documentElement.clientWidth;
+		body.style.paddingRight = `${parseFloat(getComputedStyle(body).paddingRight) + gutter}px`;
+		body.style.position = "fixed";
+		body.style.top = `-${scrollY}px`;
+		body.style.left = `-${scrollX}px`;
+		body.style.width = "100%";
+		document.documentElement.style.overflow = "hidden";
+		restorePageScroll = () => {
+			if (saved === null) body.removeAttribute("style");
+			else body.setAttribute("style", saved);
+			document.documentElement.style.overflow = rootOverflow;
+			window.scrollTo(scrollX, scrollY);
+		};
+	}
+	return () => {
+		if (--modalScrollLocks === 0) {
+			restorePageScroll?.();
+			restorePageScroll = undefined;
+		}
+	};
+}
+
 function useModalFocus(onClose: () => void) {
 	const dialog = useRef<HTMLDivElement>(null);
 	const onCloseRef = useRef(onClose);
@@ -94,6 +118,7 @@ function useModalFocus(onClose: () => void) {
 	useEffect(() => {
 		const node = dialog.current;
 		if (!node) return;
+		const unlockScroll = lockPageScroll();
 		const previousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
 		const focusable = () =>
 			Array.from(node.querySelectorAll<HTMLElement>(focusableSelector)).filter(
@@ -132,6 +157,7 @@ function useModalFocus(onClose: () => void) {
 		window.addEventListener("keydown", handleKeyDown, true);
 		return () => {
 			window.removeEventListener("keydown", handleKeyDown, true);
+			unlockScroll();
 			window.requestAnimationFrame(() => {
 				if (previousFocus?.isConnected) previousFocus.focus();
 			});
@@ -200,7 +226,6 @@ export default function Photos() {
 		try {
 			const nextSession = await api<PhotoSession>("/?action=session");
 			if (!nextSession.authenticated) {
-				storageRemove(`hth-photo-favourites:${session.accountId || "unknown"}`);
 				setManifest(null);
 				setSession({ authenticated: false });
 				setNotice({ kind: "info", text: t.sessionExpired });
@@ -240,7 +265,6 @@ export default function Photos() {
 			setNotice({ kind: "error", text: error instanceof Error ? error.message : t.serviceError });
 			return;
 		}
-		storageRemove(`hth-photo-favourites:${session.accountId || "unknown"}`);
 		setManifest(null);
 		setSession({ authenticated: false });
 	};
@@ -505,6 +529,21 @@ function Album({
 	const [removal, setRemoval] = useState<AlbumPhoto | null>(null);
 	const visitSent = useRef(false);
 	useEffect(() => {
+		const previousRestoration = window.history.scrollRestoration;
+		window.history.scrollRestoration = "manual";
+		const syncViewer = () => {
+			const id = new URLSearchParams(window.location.search).get("photo");
+			setTerms(null);
+			setRemoval(null);
+			setViewer(manifest.photos.find(item => item.id === id) || null);
+		};
+		window.addEventListener("popstate", syncViewer);
+		return () => {
+			window.removeEventListener("popstate", syncViewer);
+			window.history.scrollRestoration = previousRestoration;
+		};
+	}, [manifest.photos]);
+	useEffect(() => {
 		if (visitSent.current) return;
 		visitSent.current = true;
 		void api("/?action=events", {
@@ -524,8 +563,11 @@ function Album({
 		setNotice({ kind: "info", text: t.unavailable });
 	}, [manifest.photos, removal, setNotice, t.unavailable, terms, viewer]);
 	const closeViewer = () => {
-		setViewer(null);
-		window.history.replaceState({}, "", "/");
+		if (window.history.state?.photoViewer) window.history.back();
+		else {
+			setViewer(null);
+			window.history.replaceState(null, "", "/");
+		}
 	};
 	const categoryCounts = useMemo(
 		() =>
@@ -565,12 +607,14 @@ function Album({
 						aria-label={language === "en" ? "Photo categories" : "Catégories de photos"}
 					>
 						<button
+							aria-pressed={category === "all"}
 							className={category === "all" ? styles.activeTab : ""}
 							onClick={() => setCategory("all")}
 						>
 							{t.all} <span>{manifest.photos.length}</span>
 						</button>
 						<button
+							aria-pressed={category === "favourites"}
 							className={category === "favourites" ? styles.activeTab : ""}
 							onClick={() => setCategory("favourites")}
 						>
@@ -581,6 +625,7 @@ function Album({
 							.map(key => (
 								<button
 									key={key}
+									aria-pressed={category === key}
 									className={category === key ? styles.activeTab : ""}
 									onClick={() => setCategory(key)}
 								>
@@ -599,8 +644,8 @@ function Album({
 										className={styles.photoButton}
 										onClick={() => {
 											setViewer(photo);
-											window.history.replaceState(
-												{},
+											window.history.pushState(
+												{ photoViewer: true },
 												"",
 												`/?photo=${encodeURIComponent(photo.id)}`,
 											);
@@ -618,11 +663,23 @@ function Album({
 									</button>
 									<div className={styles.cardMeta}>
 										<div>
-											<strong>{photoLabel(photo.category, language)}</strong>
-											<span>
-												{photo.activity?.views ?? 0} {t.views} ·{" "}
-												{photo.activity?.downloadRequests ?? 0} {t.downloadRequests}
-											</span>
+											{(category === "all" || category === "favourites") && (
+												<strong>{photoLabel(photo.category, language)}</strong>
+											)}
+											{Boolean(photo.activity?.views || photo.activity?.downloadRequests) && (
+												<span>
+													{[
+														photo.activity?.views
+															? `${photo.activity.views} ${t.views}`
+															: "",
+														photo.activity?.downloadRequests
+															? `${photo.activity.downloadRequests} ${t.downloadRequests}`
+															: "",
+													]
+														.filter(Boolean)
+														.join(" · ")}
+												</span>
+											)}
 										</div>
 										<button
 											className={`${styles.favourite} ${favourites.has(photo.id) ? styles.favouriteOn : ""}`}
@@ -640,7 +697,7 @@ function Album({
 				) : (
 					<div className={styles.empty}>
 						<span aria-hidden="true">✦</span>
-						<p>{t.empty}</p>
+						<p>{category === "favourites" ? t.emptyFavourites : t.empty}</p>
 					</div>
 				)}
 			</main>
@@ -653,6 +710,7 @@ function Album({
 					favourites={favourites}
 					onToggleFavourite={toggleFavourite}
 					onClose={closeViewer}
+					onNavigate={setViewer}
 					onTerms={setTerms}
 					onRemoval={setRemoval}
 				/>
@@ -683,6 +741,54 @@ function Album({
 	);
 }
 
+function PhotoPreview({ photo, language }: { photo: AlbumPhoto; language: Language }) {
+	const t = copy[language];
+	const image = useRef<HTMLImageElement>(null);
+	const [status, setStatus] = useState<"loading" | "ready" | "error">("loading");
+	const [attempt, setAttempt] = useState(0);
+	useEffect(() => {
+		if (image.current?.complete && image.current.naturalWidth > 0) setStatus("ready");
+	}, [attempt]);
+	return (
+		<>
+			<img
+				key={attempt}
+				ref={image}
+				className={styles.viewerImage}
+				style={{ visibility: status === "ready" ? "visible" : "hidden" }}
+				src={displayUrl(photo.preview.url)}
+				alt=""
+				width={photo.preview.width}
+				height={photo.preview.height}
+				onLoad={() => setStatus("ready")}
+				onError={() => setStatus("error")}
+			/>
+			{status !== "ready" && (
+				<div className={styles.previewStatus} role="status">
+					{status === "loading" ? (
+						<>
+							<Spinner /> {t.loading}
+						</>
+					) : (
+						<>
+							<p>{t.imageError}</p>
+							<button
+								className={styles.outlineButton}
+								onClick={() => {
+									setStatus("loading");
+									setAttempt(value => value + 1);
+								}}
+							>
+								{t.retry}
+							</button>
+						</>
+					)}
+				</div>
+			)}
+		</>
+	);
+}
+
 function Viewer({
 	photo,
 	photos,
@@ -691,6 +797,7 @@ function Viewer({
 	favourites,
 	onToggleFavourite,
 	onClose,
+	onNavigate,
 	onTerms,
 	onRemoval,
 }: {
@@ -701,16 +808,13 @@ function Viewer({
 	favourites: Set<string>;
 	onToggleFavourite: (id: string) => void;
 	onClose: () => void;
+	onNavigate: (photo: AlbumPhoto) => void;
 	onTerms: (p: AlbumPhoto) => void;
 	onRemoval: (p: AlbumPhoto) => void;
 }) {
 	const t = copy[language];
-	const initialIndex = Math.max(
-		0,
-		photos.findIndex(item => item.id === photo.id),
-	);
-	const [position, setPosition] = useState(initialIndex);
-	const current = photos[position] || photo;
+	const position = photos.findIndex(item => item.id === photo.id);
+	const current = photo;
 	const dialog = useModalFocus(onClose);
 	const touchStart = useRef<number | null>(null);
 	const queue = useRef<Set<string>>(new Set());
@@ -719,11 +823,11 @@ function Viewer({
 			const nextPosition = (position + delta + photos.length) % photos.length;
 			const next = photos[nextPosition];
 			if (next) {
-				setPosition(nextPosition);
-				window.history.replaceState({}, "", `/?photo=${encodeURIComponent(next.id)}`);
+				onNavigate(next);
+				window.history.replaceState(window.history.state, "", `/?photo=${encodeURIComponent(next.id)}`);
 			}
 		},
-		[photos, position],
+		[photos, position, onNavigate],
 	);
 	useEffect(() => {
 		const key = (event: globalThis.KeyboardEvent) => {
@@ -786,13 +890,7 @@ function Viewer({
 					>
 						‹
 					</button>
-					<img
-						className={styles.viewerImage}
-						src={displayUrl(current.preview.url)}
-						alt=""
-						width={current.preview.width}
-						height={current.preview.height}
-					/>
+					<PhotoPreview key={current.id} photo={current} language={language} />
 					<button
 						className={`${styles.viewerArrow} ${styles.viewerNext}`}
 						onClick={() => navigate(1)}
