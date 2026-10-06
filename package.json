@@ -1,5 +1,5 @@
 {
-	"name": "@hack-the-hill/photo-gallery-app",
+	"name": "@hack-the-hill/photo-album-app",
 	"version": "0.1.0",
 	"private": true,
 	"type": "module",
