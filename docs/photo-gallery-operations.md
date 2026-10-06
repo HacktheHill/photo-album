@@ -34,9 +34,9 @@ Cloudflare Access protects `/restore` and its descendants only. Its Google Works
 
 ## Album eligibility
 
-Access is the union of attended hacker application rows, all addresses in the approved Devpost registrant/project and volunteer exports, CTN members, and explicitly approved addresses. An address in another approved source keeps access even if its hacker application is not marked attended. The live application Sheet supplies attendance; the CSV does not.
+Any address with the exact `@ctn-rtc.org` domain has access after email-code verification; it does not require a prior import. Other addresses need explicit approval or membership in the union of attended hacker application rows, all addresses in the approved Devpost registrant/project and volunteer exports, CTN members, and explicitly approved addresses. An address in another approved source keeps access even if its hacker application is not marked attended. The live application Sheet supplies attendance; the CSV does not.
 
-The 2026-10-06 reconciliation verified 530 active addresses and revoked 549 addresses included solely by non-attended hacker application rows. Source exports and the verification report remain private, outside Git. Imports are additive: reconcile sources before revoking access and revoke sessions with an excluded account.
+The initial 2026-10-06 reconciliation verified 530 active addresses and revoked 549 addresses included solely by non-attended hacker application rows. Additional explicit approvals and the CTN-domain policy were applied later that day. Source exports and verification reports remain private, outside Git. Imports are additive: reconcile sources before revoking access and revoke sessions with an excluded account.
 
 ## Local data
 

@@ -210,8 +210,16 @@ function escapeHtml(value: string): string {
 }
 
 async function accountForEmail(env: Env, email: string): Promise<Account | null> {
+	const emailHash = await hmac(env.OTP_HMAC_SECRET, email);
+	if (email.endsWith("@ctn-rtc.org")) {
+		await env.DB.prepare(
+			"INSERT INTO accounts(id,email,email_hash,active,created_at,revoked_at) VALUES(?,?,?,1,?,NULL) ON CONFLICT(email_hash) DO UPDATE SET active=1,revoked_at=NULL",
+		)
+			.bind(crypto.randomUUID(), email, emailHash, Date.now())
+			.run();
+	}
 	return env.DB.prepare("SELECT id,email,active FROM accounts WHERE email_hash=? AND active=1 LIMIT 1")
-		.bind(await hmac(env.OTP_HMAC_SECRET, email))
+		.bind(emailHash)
 		.first<Account>();
 }
 
