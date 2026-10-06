@@ -35,6 +35,10 @@ npm run deploy:production
 
 Deployment builds the application and publishes it with the Worker. CI verifies pull requests and `main`; production deployment is an explicit command.
 
+### Commit messages
+
+Commits follow [Conventional Commits](https://www.conventionalcommits.org/), for example `fix(worker): serve HEAD requests for pages`. Use a type such as `feat`, `fix`, `docs`, `test`, `refactor`, `build`, `ci` or `chore`, with an optional scope. `npm ci` installs a `commit-msg` hook that runs commitlint, `npm run lint:commits` checks the commits on your branch, and CI checks every commit in a pull request.
+
 ## Structure
 
 | Directory                 | Purpose                                                             |
