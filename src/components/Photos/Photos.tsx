@@ -314,6 +314,7 @@ function Shell({
 				<a href="/" className={styles.brand} aria-label="Hack the Hill III">
 					<img src="/Logos/hackthehill-banner.svg" alt="" />
 				</a>
+				{onSignOut && <h1 className={styles.albumTitle}>{t.cover}</h1>}
 				<div className={styles.topActions}>
 					<button
 						className={styles.language}
@@ -522,10 +523,6 @@ function Album({
 		window.history.replaceState({}, "", "/");
 		setNotice({ kind: "info", text: t.unavailable });
 	}, [manifest.photos, removal, setNotice, t.unavailable, terms, viewer]);
-	const coverPhoto =
-		manifest.photos.find(item => item.category === "Opening Ceremony" && item.filename === "DSC_3416.jpg") ||
-		manifest.photos.find(item => item.category === "Closing Ceremony") ||
-		manifest.photos[0];
 	const closeViewer = () => {
 		setViewer(null);
 		window.history.replaceState({}, "", "/");
@@ -557,26 +554,6 @@ function Album({
 	return (
 		<Shell language={language} setLanguage={setLanguage} onSignOut={onSignOut}>
 			<main className={styles.album}>
-				<section className={styles.albumHero}>
-					<div>
-						<h1>{t.cover}</h1>
-					</div>
-					{coverPhoto ? (
-						<div className={styles.heroPhoto}>
-							<img
-								src={displayUrl(coverPhoto.thumbnail.url)}
-								alt=""
-								width={coverPhoto.thumbnail.width}
-								height={coverPhoto.thumbnail.height}
-							/>
-						</div>
-					) : (
-						<div className={styles.heroStamp} aria-hidden="true">
-							<strong>{new Set(manifest.photos.map(photo => photo.category)).size}</strong>
-							<span>{language === "en" ? "chapters" : "chapitres"}</span>
-						</div>
-					)}
-				</section>
 				{sharedPhotoId && !sharedPhoto && (
 					<div className={styles.notice} role="status">
 						{t.unavailable}
