@@ -183,8 +183,6 @@ async function makeRemoteProxy(configPath) {
 	};
 	await writeFile(temporaryConfig, `${JSON.stringify(safeConfig, null, 2)}\n`, "utf8");
 	const require = createRequire(pathToFileURL(join(serviceRoot, "package.json")));
-	// createRequire resolves the pinned Worker dependency; the import linter only searches this script’s ancestors.
-	// eslint-disable-next-line import/no-unresolved
 	const { getPlatformProxy } = require("wrangler");
 	try {
 		const platform = await getPlatformProxy({ configPath: temporaryConfig, remoteBindings: true, persist: false });

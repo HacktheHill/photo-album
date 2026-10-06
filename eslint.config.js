@@ -1,3 +1,4 @@
+import { fileURLToPath } from "node:url";
 import tsParser from "@typescript-eslint/parser";
 import * as astroParser from "astro-eslint-parser";
 import importPlugin from "eslint-plugin-import";
@@ -37,6 +38,7 @@ const importResolutionConfig = {
 				extensions,
 			},
 			node: {
+				paths: [fileURLToPath(new URL("./services/photo-gallery/node_modules", import.meta.url))],
 				extensions,
 			},
 		},
