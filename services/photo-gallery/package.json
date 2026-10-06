@@ -1,5 +1,5 @@
 {
-	"name": "@hack-the-hill/photo-gallery",
+	"name": "@hack-the-hill/photo-album",
 	"private": true,
 	"type": "module",
 	"scripts": {

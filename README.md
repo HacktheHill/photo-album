@@ -1,8 +1,8 @@
-# Hack the Hill photo gallery
+# Hack the Hill photo album
 
-This private repository contains the standalone attendee photo gallery for Hack the Hill III. The canonical album is served at [photos.hackthehill.com](https://photos.hackthehill.com/) and the attendee SPA also presents a minimal restore confirmation when an organiser follows a protected restore link.
+This private repository contains the standalone attendee photo album for Hack the Hill III. The canonical album is served at [photos.hackthehill.com](https://photos.hackthehill.com/) and the attendee SPA also presents a minimal restore confirmation when an organiser follows a protected restore link.
 
-The gallery is independent of the main Hack the Hill website. Astro builds the browser application, and the Cloudflare Worker serves that build through Worker Static Assets while handling the private API and media routes on the same origin. This project does not migrate, replace, or add routes to the main website.
+The album is independent of the main Hack the Hill website. Astro builds the browser application, and the Cloudflare Worker serves that build through Worker Static Assets while handling the private API and media routes on the same origin. This project does not migrate, replace, or add routes to the main website.
 
 ## Canonical routes
 

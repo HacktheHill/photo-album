@@ -1,4 +1,4 @@
-# Photo gallery Worker
+# Photo album Worker
 
 This directory contains the Cloudflare Worker for the standalone gallery at `https://photos.hackthehill.com`. The root Astro build is attached as Worker Static Assets in the same deployment. The Worker owns the single internal `/api/*` prefix for authentication, media, downloads, and restore actions, while the `/` album and `/restore?case=<caseId>&version=<n>` confirmation route are served from the built Astro assets.
 
