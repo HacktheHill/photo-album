@@ -1,3 +1,4 @@
+import { publicHighlights } from "./public-highlights";
 import { AwsClient } from "aws4fetch";
 import { createRemoteJWKSet, jwtVerify, type JWTPayload } from "jose";
 
@@ -485,6 +486,7 @@ async function imageResponse(
 	env: Env,
 	id: string,
 	format: "thumbnail" | "preview",
+	publicHighlight = false,
 ): Promise<Response> {
 	const row = await env.DB.prepare(
 		"SELECT p.id,p.status,p.filename,v.object_key as objectKey,v.content_type as contentType,v.bytes,v.sha256 FROM photos p JOIN photo_variants v ON v.photo_id=p.id AND v.format=? WHERE p.id=? AND p.status='published' LIMIT 1",
@@ -506,7 +508,7 @@ async function imageResponse(
 		...securityHeaders,
 		"Content-Type": row.contentType || "image/jpeg",
 		"Content-Length": String(row.bytes),
-		"Cache-Control": "private, max-age=60, must-revalidate",
+		"Cache-Control": publicHighlight ? "no-store" : "private, max-age=60, must-revalidate",
 	});
 	if (row.sha256) headers.set("ETag", `"${row.sha256}"`);
 	if (
@@ -1083,6 +1085,10 @@ async function handle(request: Request, env: Env, ctx: ExecutionContext): Promis
 	}
 	if (root && action === "download" && request.method === "GET") {
 		return photoId(id) ? downloadResponse(request, env, id) : error("Not found.", 404);
+	}
+	if (root && action === "highlight" && request.method === "GET") {
+		if (!publicHighlights.has(id)) return error("Not found.", 404);
+		return imageResponse(request, env, id, "preview", true);
 	}
 	if (root && (action === "thumbnail" || action === "preview") && photoId(id) && request.method === "GET") {
 		if (!(await attendeeSession(request, env))) return error("Authentication required.", 401);
