@@ -535,7 +535,7 @@ describe("photo gallery in the Workers runtime", () => {
 		expect((await SELF.fetch("https://gallery.test/?action=album", { headers: { cookie } })).status).toBe(401);
 	});
 
-	it("blocks restoration while another pending case exists for the photo", async () => {
+	it("rejects requests for hidden photos and restores every pending request together", async () => {
 		const code = await requestCode();
 		const verified = await SELF.fetch("https://gallery.test/?action=verify-code", {
 			method: "POST",
@@ -543,7 +543,7 @@ describe("photo gallery in the Workers runtime", () => {
 			body: JSON.stringify({ email, code }),
 		});
 		const cookie = verified.headers.get("set-cookie")?.split(";")[0] ?? "";
-		const session = (await verified.json()) as { csrfToken: string };
+		const session = (await verified.json()) as { csrfToken: string; accountId: string };
 		const submit = (requestId: string) =>
 			SELF.fetch("https://gallery.test/?action=remove&photo=photo-1", {
 				method: "POST",
@@ -553,13 +553,26 @@ describe("photo gallery in the Workers runtime", () => {
 					"content-type": "application/json",
 					"x-csrf-token": session.csrfToken,
 				},
-				body: JSON.stringify({ explanation: "Pending restoration blocker.", requestId }),
+				body: JSON.stringify({ explanation: "Pending restoration request.", requestId }),
 			});
 		const first = await submit("11111111-1111-4111-8111-111111111111");
-		const second = await submit("22222222-2222-4222-8222-222222222222");
 		expect(first.status).toBe(202);
-		expect(second.status).toBe(202);
 		const firstCase = ((await first.json()) as { caseId: string }).caseId;
+		// The photo is hidden now, so a second request cannot add another pending case.
+		expect((await submit("22222222-2222-4222-8222-222222222222")).status).toBe(404);
+		// A retry of the accepted request is still idempotent.
+		expect(
+			((await (await submit("11111111-1111-4111-8111-111111111111")).json()) as { caseId: string }).caseId,
+		).toBe(firstCase);
+		// Simulate a second pending case left over from before this rule existed.
+		await env.DB.batch([
+			env.DB.prepare(
+				"INSERT INTO removal_cases(id,photo_id,requester_account_id,explanation,status,photo_version,cross_channel_reviewed,created_at,updated_at) VALUES('legacy-case','photo-1',?,'Legacy duplicate.','pending',3,0,?,?)",
+			).bind(session.accountId, Date.now(), Date.now()),
+			env.DB.prepare(
+				"INSERT INTO removal_reports(id,case_id,photo_id,requester_account_id,explanation,request_id,status,photo_version,created_at) VALUES('legacy-report','legacy-case','photo-1',?,'Legacy duplicate.','33333333-3333-4333-8333-333333333333','pending',3,?)",
+			).bind(session.accountId, Date.now()),
+		]);
 		const admin = await accessFixture();
 		try {
 			const state = await SELF.fetch(`https://gallery.test/restore?action=case&case=${firstCase}&version=3`, {
@@ -567,7 +580,7 @@ describe("photo gallery in the Workers runtime", () => {
 			});
 			expect(state.status).toBe(200);
 			const stateBody = (await state.json()) as { canRestore: boolean; csrfToken: string };
-			expect(stateBody.canRestore).toBe(false);
+			expect(stateBody.canRestore).toBe(true);
 			const restore = await SELF.fetch(`https://gallery.test/restore?action=case&case=${firstCase}`, {
 				method: "POST",
 				headers: {
@@ -578,11 +591,15 @@ describe("photo gallery in the Workers runtime", () => {
 				},
 				body: JSON.stringify({ expectedVersion: 3 }),
 			});
-			expect(restore.status).toBe(409);
+			expect(restore.status).toBe(200);
 			expect(await env.DB.prepare("SELECT status,version FROM photos WHERE id='photo-1'").first()).toMatchObject({
-				status: "quarantined",
-				version: 3,
+				status: "published",
+				version: 4,
 			});
+			const pending = await env.DB.prepare(
+				"SELECT (SELECT COUNT(*) FROM removal_cases WHERE photo_id='photo-1' AND status='pending') + (SELECT COUNT(*) FROM removal_reports WHERE photo_id='photo-1' AND status='pending') as count",
+			).first<{ count: number }>();
+			expect(pending?.count).toBe(0);
 		} finally {
 			admin.restore();
 		}
@@ -705,7 +722,12 @@ describe("photo gallery in the Workers runtime", () => {
 			"a0000000-0000-4000-8000-000000000004",
 			"a0000000-0000-4000-8000-000000000005",
 		];
-		for (const [index, id] of ids.entries()) expect((await submit(id, `Report ${index}`)).status).toBe(202);
+		// Requests are accepted only for published photos, so republish between them.
+		const republish = () => env.DB.prepare("UPDATE photos SET status='published' WHERE id='photo-1'").run();
+		for (const [index, id] of ids.entries()) {
+			expect((await submit(id, `Report ${index}`)).status).toBe(202);
+			await republish();
+		}
 		expect((await submit("a0000000-0000-4000-8000-000000000006", "The sixth report is over quota.")).status).toBe(
 			429,
 		);
@@ -738,6 +760,12 @@ describe("photo gallery in the Workers runtime", () => {
 			env.DB.prepare(
 				"INSERT INTO removal_reports(id,case_id,photo_id,requester_account_id,explanation,request_id,status,photo_version,created_at) VALUES('pending-retained-report','pending-retained','photo-1','acct-1','Pending report','pending-retained-request','pending',1,?)",
 			).bind(old),
+			env.DB.prepare(
+				"INSERT INTO notification_outbox(id,kind,payload_json,attempts,available_at,sent_at,created_at) VALUES('old-sent','removal','{}',0,?,?,?)",
+			).bind(old, old, old),
+			env.DB.prepare(
+				"INSERT INTO notification_outbox(id,kind,payload_json,attempts,available_at,created_at) VALUES('old-unsent','removal','{}',3,?,?)",
+			).bind(old, old),
 		]);
 		const waits: Promise<unknown>[] = [];
 		await worker.scheduled({} as ScheduledController, env, {
@@ -774,6 +802,11 @@ describe("photo gallery in the Workers runtime", () => {
 				}>()
 			)?.count,
 		).toBe(1);
+		// Delivered removal emails expire; undelivered ones stay until they are sent.
+		const outbox = await env.DB.prepare(
+			"SELECT id FROM notification_outbox WHERE id IN ('old-sent','old-unsent') ORDER BY id",
+		).all<{ id: string }>();
+		expect(outbox.results.map(row => row.id)).toEqual(["old-unsent"]);
 	});
 
 	it("consumes a successful OTP exactly once", async () => {

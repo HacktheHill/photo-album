@@ -249,7 +249,7 @@ async function requireCsrf(request: Request, env: Env, session: Session): Promis
 	return !!supplied && (await equalSecret(await hmac(env.SESSION_HMAC_SECRET, supplied), session.csrfHash));
 }
 
-async function issueOtp(email: string): Promise<string> {
+function issueOtp(): string {
 	const max = Math.floor(0xffffffff / 100000000) * 100000000;
 	let number: number;
 	do number = new DataView(randomBytes(4).buffer).getUint32(0);
@@ -502,21 +502,18 @@ async function imageResponse(
 			sha256: string | null;
 		}>();
 	if (!row) return error("Not found.", 404);
-	const object = await env.PHOTO_BUCKET.get(row.objectKey);
-	if (!object?.body) return error("Not found.", 404);
 	const headers = new Headers({
 		...securityHeaders,
 		"Content-Type": row.contentType || "image/jpeg",
-		"Content-Length": String(row.bytes),
 		"Cache-Control": publicHighlight ? "no-store" : "private, max-age=60, must-revalidate",
 	});
 	if (row.sha256) headers.set("ETag", `"${row.sha256}"`);
-	if (
-		request.headers.get("if-none-match") &&
-		row.sha256 &&
-		request.headers.get("if-none-match") === `"${row.sha256}"`
-	)
+	// Publication was checked above; a matching ETag needs no R2 read.
+	if (row.sha256 && request.headers.get("if-none-match") === `"${row.sha256}"`)
 		return new Response(null, { status: 304, headers });
+	const object = await env.PHOTO_BUCKET.get(row.objectKey);
+	if (!object?.body) return error("Not found.", 404);
+	headers.set("Content-Length", String(row.bytes));
 	return new Response(object.body, { headers });
 }
 
@@ -637,7 +634,6 @@ async function removal(request: Request, env: Env, id: string, ctx: ExecutionCon
 	if (!sessionResult) return error("Authentication required.", 401);
 	if (!(await requireCsrf(request, env, sessionResult.session))) return error("Invalid CSRF token.", 403);
 	const body = await boundedJson(request);
-	if (body.albumVisit !== undefined && typeof body.albumVisit !== "boolean") return error("Invalid albumVisit.", 400);
 	const explanation = typeof body.explanation === "string" ? body.explanation.trim() : "";
 	const reqId = requestId(body.requestId);
 	if (!explanation || explanation.length > 2000 || !reqId)
@@ -653,6 +649,9 @@ async function removal(request: Request, env: Env, id: string, ctx: ExecutionCon
 		.bind(id, sessionResult.session.id, reqId)
 		.first<{ caseId: string }>();
 	if (existing) return json({ caseId: existing.caseId }, 202);
+	// A hidden photo already has a pending request. Further requests would only
+	// add more pending rows for the organiser to resolve.
+	if (photo.status !== "published") return error("Not found.", 404);
 	const outboxId = (await digest(`outbox:${caseId}`)).slice(0, 42);
 	const now = Date.now();
 	const reviewOrigin = configuredOrigin(env);
@@ -666,11 +665,11 @@ async function removal(request: Request, env: Env, id: string, ctx: ExecutionCon
 		html: `<p>Photo removal request / Demande de retrait <strong>${escapeHtml(caseId)}</strong></p><p>Photo / Photo: ${escapeHtml(photo.filename)}</p><p>Category / Catégorie: ${escapeHtml(photo.category)}</p><p>Reason / Motif:</p><p>${escapeHtml(explanation)}</p><p><a href=\"${escapeHtml(reviewUrl)}\">Restore photo / Restaurer la photo</a></p>`,
 	});
 	const hourAgo = now - 60 * 60 * 1000;
-	// The conditional INSERT is the quota gate. It runs in the same D1 batch as
-	// report creation, so parallel requests cannot both pass a pre-count.
+	// The conditional INSERT is the quota and publication gate. It runs in the same
+	// D1 batch as report creation, so parallel requests cannot both pass.
 	const results = await env.DB.batch([
 		env.DB.prepare(
-			"INSERT OR IGNORE INTO removal_cases(id,photo_id,requester_account_id,explanation,status,photo_version,cross_channel_reviewed,created_at,updated_at) SELECT ?,?,?,?,'pending',?,0,?,? WHERE (SELECT COUNT(*) FROM removal_reports WHERE requester_account_id=? AND created_at>=?) < ? AND (SELECT COUNT(*) FROM removal_reports WHERE requester_account_id=? AND photo_id=? AND created_at>=?) < ?",
+			"INSERT OR IGNORE INTO removal_cases(id,photo_id,requester_account_id,explanation,status,photo_version,cross_channel_reviewed,created_at,updated_at) SELECT ?,?,?,?,'pending',?,0,?,? WHERE EXISTS (SELECT 1 FROM photos WHERE id=? AND status='published') AND (SELECT COUNT(*) FROM removal_reports WHERE requester_account_id=? AND created_at>=?) < ? AND (SELECT COUNT(*) FROM removal_reports WHERE requester_account_id=? AND photo_id=? AND created_at>=?) < ?",
 		).bind(
 			caseId,
 			id,
@@ -679,6 +678,7 @@ async function removal(request: Request, env: Env, id: string, ctx: ExecutionCon
 			photo.version + 1,
 			now,
 			now,
+			id,
 			sessionResult.session.id,
 			hourAgo,
 			REPORT_ACCOUNT_LIMIT,
@@ -712,6 +712,10 @@ async function removal(request: Request, env: Env, id: string, ctx: ExecutionCon
 			.bind(id, sessionResult.session.id, reqId)
 			.first<{ caseId: string }>();
 		if (raced) return json({ caseId: raced.caseId }, 202);
+		const current = await env.DB.prepare("SELECT status FROM photos WHERE id=? LIMIT 1")
+			.bind(id)
+			.first<{ status: string }>();
+		if (current?.status !== "published") return error("Not found.", 404);
 		return error("Removal request limit reached. Please try again later.", 429);
 	}
 	ctx.waitUntil(processOutbox(env));
@@ -731,20 +735,17 @@ async function events(request: Request, env: Env): Promise<Response> {
 		return error("Invalid photoIds.", 400);
 	const now = Date.now();
 	const viewerKey = await hmac(env.SESSION_HMAC_SECRET, `viewer-session:${sessionResult.session.tokenHash}`);
-	const statements: D1PreparedStatement[] = [];
-	for (const id of [...new Set(body.photoIds as string[])]) {
-		const inserted = await env.DB.prepare(
+	const day = new Date(now).toISOString().slice(0, 10);
+	// One batch for every photo: each aggregate increment runs only when the
+	// preceding deduplication insert added a row (changes() reflects that insert).
+	const statements = [...new Set(body.photoIds as string[])].flatMap(id => [
+		env.DB.prepare(
 			"INSERT OR IGNORE INTO viewer_opens(photo_id,session_key,opened_at) SELECT id,?,? FROM photos WHERE id=? AND status='published'",
-		)
-			.bind(viewerKey, now, id)
-			.run();
-		if (inserted.meta.changes > 0)
-			statements.push(
-				env.DB.prepare(
-					"INSERT INTO daily_aggregates(day,photo_id,opens) VALUES(?,?,1) ON CONFLICT(day,photo_id) DO UPDATE SET opens=opens+1",
-				).bind(new Date(now).toISOString().slice(0, 10), id),
-			);
-	}
+		).bind(viewerKey, now, id),
+		env.DB.prepare(
+			"INSERT INTO daily_aggregates(day,photo_id,opens) SELECT ?,?,1 WHERE changes()>0 ON CONFLICT(day,photo_id) DO UPDATE SET opens=opens+1",
+		).bind(day, id),
+	]);
 	if (statements.length) await env.DB.batch(statements);
 	if (body.albumVisit === true)
 		await env.DB.prepare(
@@ -772,17 +773,7 @@ async function restoreCase(request: Request, env: Env, identity: AccessIdentity,
 			photoStatus: string;
 		}>();
 	if (!row) return error("Not found.", 404);
-	const blockers = await env.DB.prepare(
-		"SELECT (SELECT COUNT(*) FROM removal_reports WHERE photo_id=? AND status='pending' AND case_id<>?) as reportCount,(SELECT COUNT(*) FROM removal_cases WHERE photo_id=? AND status='pending' AND id<>?) as caseCount",
-	)
-		.bind(row.photoId, caseId, row.photoId, caseId)
-		.first<{ reportCount: number; caseCount: number }>();
-	const canRestore =
-		row.status === "pending" &&
-		row.photoStatus === "quarantined" &&
-		row.photoVersion === version &&
-		Number(blockers?.reportCount ?? 0) === 0 &&
-		Number(blockers?.caseCount ?? 0) === 0;
+	const canRestore = row.status === "pending" && row.photoStatus === "quarantined" && row.photoVersion === version;
 	return json({
 		filename: row.filename,
 		canRestore,
@@ -811,37 +802,21 @@ async function restoreCaseAction(
 	if (!row) return error("Not found.", 404);
 	if (row.status !== "pending" || row.photoStatus !== "quarantined" || row.photoVersion !== expectedVersion)
 		return error("The restoration link is no longer current.", 409);
-	const blockers = await env.DB.prepare(
-		"SELECT (SELECT COUNT(*) FROM removal_reports WHERE photo_id=? AND status='pending' AND case_id<>?) as reportCount,(SELECT COUNT(*) FROM removal_cases WHERE photo_id=? AND status='pending' AND id<>?) as caseCount",
-	)
-		.bind(row.photoId, caseId, row.photoId, caseId)
-		.first<{ reportCount: number; caseCount: number }>();
-	if (Number(blockers?.reportCount ?? 0) !== 0 || Number(blockers?.caseCount ?? 0) !== 0)
-		return error("Another pending removal request must be resolved first.", 409);
 	const operationId = crypto.randomUUID();
 	const now = Date.now();
 	const fixedReason = "Restoration approved from removal notification";
 	const results = await env.DB.batch([
 		env.DB.prepare(
-			"UPDATE photos SET status='published',version=version+1,moderation_operation_id=?,updated_at=? WHERE id=? AND version=? AND status='quarantined' AND EXISTS (SELECT 1 FROM removal_cases WHERE id=? AND status='pending') AND EXISTS (SELECT 1 FROM removal_reports WHERE case_id=? AND status='pending') AND NOT EXISTS (SELECT 1 FROM removal_reports WHERE photo_id=? AND status='pending' AND case_id<>?) AND NOT EXISTS (SELECT 1 FROM removal_cases WHERE photo_id=? AND status='pending' AND id<>?)",
-		).bind(
-			operationId,
-			now,
-			row.photoId,
-			expectedVersion,
-			caseId,
-			caseId,
-			row.photoId,
-			caseId,
-			row.photoId,
-			caseId,
-		),
+			"UPDATE photos SET status='published',version=version+1,moderation_operation_id=?,updated_at=? WHERE id=? AND version=? AND status='quarantined' AND EXISTS (SELECT 1 FROM removal_cases WHERE id=? AND status='pending') AND EXISTS (SELECT 1 FROM removal_reports WHERE case_id=? AND status='pending')",
+		).bind(operationId, now, row.photoId, expectedVersion, caseId, caseId),
+		// Restoring the photo resolves every pending request for it, so a duplicate
+		// request cannot leave the photo permanently unrestorable.
 		env.DB.prepare(
-			"UPDATE removal_reports SET status='dismissed',resolved_at=? WHERE case_id=? AND status='pending' AND EXISTS (SELECT 1 FROM photos WHERE id=? AND status='published' AND version=? AND moderation_operation_id=?)",
-		).bind(now, caseId, row.photoId, expectedVersion + 1, operationId),
+			"UPDATE removal_reports SET status='dismissed',resolved_at=? WHERE photo_id=? AND status='pending' AND EXISTS (SELECT 1 FROM photos WHERE id=? AND status='published' AND version=? AND moderation_operation_id=?)",
+		).bind(now, row.photoId, row.photoId, expectedVersion + 1, operationId),
 		env.DB.prepare(
-			"UPDATE removal_cases SET status='dismissed',moderation_operation_id=?,updated_at=? WHERE id=? AND status='pending' AND EXISTS (SELECT 1 FROM photos WHERE id=? AND status='published' AND version=? AND moderation_operation_id=?)",
-		).bind(operationId, now, caseId, row.photoId, expectedVersion + 1, operationId),
+			"UPDATE removal_cases SET status='dismissed',moderation_operation_id=?,updated_at=? WHERE photo_id=? AND status='pending' AND EXISTS (SELECT 1 FROM photos WHERE id=? AND status='published' AND version=? AND moderation_operation_id=?)",
+		).bind(operationId, now, row.photoId, row.photoId, expectedVersion + 1, operationId),
 		env.DB.prepare(
 			"INSERT INTO moderation_audit(id,actor_account_id,action,case_id,photo_id,reason,expected_version,created_at) SELECT ?,?,?,?,?,?,?,? WHERE EXISTS (SELECT 1 FROM removal_cases WHERE id=? AND status='dismissed' AND moderation_operation_id=? AND EXISTS (SELECT 1 FROM photos WHERE id=? AND status='published' AND version=? AND moderation_operation_id=?))",
 		).bind(
@@ -876,7 +851,8 @@ async function handle(request: Request, env: Env, ctx: ExecutionContext): Promis
 	const action = url.searchParams.get("action");
 	const root = url.pathname === "/";
 	const restoreRoute = url.pathname === "/restore" || url.pathname === "/restore/";
-	if ((root || restoreRoute) && !action && request.method === "GET") return env.ASSETS.fetch(request);
+	if ((root || restoreRoute) && !action && (request.method === "GET" || request.method === "HEAD"))
+		return env.ASSETS.fetch(request);
 	if (!root && !restoreRoute) return error("Not found.", 404);
 
 	if (root && action === "session" && request.method === "GET") {
@@ -886,7 +862,6 @@ async function handle(request: Request, env: Env, ctx: ExecutionContext): Promis
 			authenticated: true,
 			csrfToken: await hmac(env.SESSION_HMAC_SECRET, `${session.tokenHash}:${session.expiresAt}`),
 			accountId: session.id,
-			administrator: false,
 			licenceVersion: session.licenceVersion ?? undefined,
 			expiresAt: session.expiresAt,
 		});
@@ -900,7 +875,7 @@ async function handle(request: Request, env: Env, ctx: ExecutionContext): Promis
 			const account = await accountForEmail(env, email);
 			const emailHash = await hmac(env.OTP_HMAC_SECRET, email);
 			const ipHash = await hmac(env.OTP_HMAC_SECRET, request.headers.get("cf-connecting-ip") ?? "unknown-ip");
-			const code = await issueOtp(email);
+			const code = issueOtp();
 			const now = Date.now();
 			const challengeId = crypto.randomUUID();
 			const emailHourAgo = now - 60 * 60 * 1000;
@@ -1015,11 +990,9 @@ async function handle(request: Request, env: Env, ctx: ExecutionContext): Promis
 			)
 				.bind(tokenHash, account.id, await hmac(env.SESSION_HMAC_SECRET, csrf), Date.now(), expiresAt)
 				.run();
-			return json(
-				{ authenticated: true, csrfToken: csrf, accountId: account.id, administrator: false, expiresAt },
-				200,
-				{ "Set-Cookie": cookie(rawToken, ATTENDEE_SESSION_TTL / 1000) },
-			);
+			return json({ authenticated: true, csrfToken: csrf, accountId: account.id, expiresAt }, 200, {
+				"Set-Cookie": cookie(rawToken, ATTENDEE_SESSION_TTL / 1000),
+			});
 		} catch (caught) {
 			if (caught instanceof BadRequestError) return error("Invalid request.", 400);
 			console.error(
@@ -1130,9 +1103,9 @@ export default {
 					env.DB.prepare("DELETE FROM notification_outbox WHERE kind='otp' AND created_at<?").bind(
 						Date.now() - OTP_TTL,
 					),
-					env.DB.prepare("DELETE FROM notification_outbox WHERE kind='removal' AND created_at<?").bind(
-						cutoff,
-					),
+					env.DB.prepare(
+						"DELETE FROM notification_outbox WHERE kind='removal' AND sent_at IS NOT NULL AND created_at<?",
+					).bind(cutoff),
 					env.DB.prepare(
 						"DELETE FROM removal_reports WHERE status!='pending' AND resolved_at IS NOT NULL AND resolved_at<?",
 					).bind(caseCutoff),

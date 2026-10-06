@@ -33,7 +33,6 @@ export interface PhotoSession {
 	authenticated: boolean;
 	csrfToken?: string;
 	accountId?: string;
-	administrator?: boolean;
 	licenceVersion?: string;
 	expiresAt?: number;
 }
