@@ -57,3 +57,5 @@ Source photos, private manifests, eligibility exports, backups and credentials s
 - [Request contract](docs/photo-api-contract.md): request bodies, responses and authentication.
 - [Worker development](services/photo-gallery/README.md): package commands and dependency notes.
 - [Photo pipeline](scripts/photos/README.md): derivatives, upload and complete object verification.
+
+[Database review](docs/database-review.md) covers column purpose and recommended simplifications.
