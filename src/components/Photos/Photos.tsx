@@ -931,23 +931,17 @@ function LicenceDialog({
 				<button className={styles.dialogClose} onClick={onClose} aria-label={t.cancel}>
 					×
 				</button>
-				<div className={styles.eyebrow}>{t.terms}</div>
-				<h2 id="licence-title">{t.licenceTitle}</h2>
-				<p>{t.licenceIntro}</p>
+				<h2 id="licence-title">{t.terms}</h2>
 				<p className={styles.licenceSummary}>{t.licenceSummary}</p>
-				<div className={styles.licenceColumns}>
-					<div lang="en">
-						<h3>English</h3>
-						{licence.en.map((line, index) => (
+				<div className={styles.licenceText} lang={language}>
+					{licence[language].slice(1).map((line, index) =>
+						// Section positions in the approved bilingual licence; its first line is the dialog title.
+						[2, 4, 10, 13, 15].includes(index + 1) ? (
+							<h3 key={index}>{line}</h3>
+						) : (
 							<p key={index}>{line}</p>
-						))}
-					</div>
-					<div lang="fr">
-						<h3>Français</h3>
-						{licence.fr.map((line, index) => (
-							<p key={index}>{line}</p>
-						))}
-					</div>
+						),
+					)}
 				</div>
 				<div className={styles.downloadChoices}>
 					<button className={styles.button} disabled={busy} onClick={() => void acknowledge("full")}>
