@@ -28,12 +28,12 @@ Astro forwards application requests to the local Worker. Local authentication an
 npx playwright install chromium firefox
 npm run verify             # Formatting, lint, types, Worker/tools/pipeline/browser tests
 npm run build              # Static application in build/
-npm run deploy:dry-run     # Package the deployment without publishing
+npm run deploy:dry-run     # Package staging and production without publishing
 npm run deploy:staging
 npm run deploy:production
 ```
 
-Deployment builds the application and publishes it with the Worker. CI verifies pull requests and `main`; production deployment is an explicit command.
+Deployment builds the application and publishes it with the Worker. Apply reviewed D1 migrations before deploying code that depends on them; see [Deploy an update](docs/photo-gallery-operations.md#deploy-an-update). CI verifies pull requests and `main`; production deployment is an explicit command.
 
 ### Commit messages
 
@@ -46,8 +46,9 @@ Commits follow [Conventional Commits](https://www.conventionalcommits.org/), for
 | `src/`                    | Astro pages, React album/viewer, bilingual copy, styles and licence |
 | `services/photo-gallery/` | Worker, D1 migrations, authentication, private media and moderation |
 | `scripts/photos/`         | Photo variants, upload, inventory and verification tools            |
-| `public/`                 | Logo and fonts                                                      |
-| `docs/`                   | Operations and request contracts                                    |
+| `tests/e2e/`              | Playwright browser tests with synthetic fixtures                    |
+| `public/`                 | Logo, favicons, fonts, `robots.txt` and static security headers     |
+| `docs/`                   | Operations, request contract, database review and schema runbook    |
 
 The app uses Astro and React, Cloudflare Workers with private R2 and D1, and AWS SES for email. Pages and application requests use `/` and `/restore`; an `action` query parameter selects each operation. Assets and browser requests use root-relative paths on the same origin, such as `/fonts/…` and `/?action=album`.
 
@@ -62,7 +63,7 @@ Source photos, private manifests, eligibility exports, backups and credentials s
 - [Worker development](services/photo-gallery/README.md): package commands and dependency notes.
 - [Photo pipeline](scripts/photos/README.md): derivatives, upload and complete object verification.
 
-[Database review](docs/database-review.md) covers column purpose and recommended simplifications.
+[Database review](docs/database-review.md) covers column purpose and the schema cleanup in migration `0006`; the [schema maintenance runbook](docs/schema-maintenance.md) covers its one-time production cutover.
 
 ## Licence
 
