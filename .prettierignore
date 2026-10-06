@@ -1,0 +1,9 @@
+node_modules/
+build/
+.astro/
+**/.wrangler/
+**/worker-configuration.d.ts
+package-lock.json
+**/package-lock.json
+playwright-report/
+test-results/

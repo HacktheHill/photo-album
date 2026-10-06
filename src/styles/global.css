@@ -1,0 +1,54 @@
+@import "./tokens.css";
+@font-face {
+	font-family: Rubik;
+	src: url("/fonts/rubik/Rubik-VariableFont_wght.ttf") format("truetype-variations");
+	font-weight: 300 900;
+	font-display: swap;
+}
+@font-face {
+	font-family: Coolvetica;
+	src: url("/fonts/coolvetica/coolvetica.otf") format("opentype");
+	font-weight: 400;
+	font-display: swap;
+}
+:root {
+	font-family: var(--font-body);
+	color: var(--color-ink);
+	background: var(--color-album-surface);
+}
+*,
+*::before,
+*::after {
+	box-sizing: border-box;
+}
+body {
+	margin: 0;
+	min-width: 320px;
+	-webkit-font-smoothing: antialiased;
+}
+button,
+input,
+textarea,
+select {
+	font: inherit;
+}
+button {
+	cursor: pointer;
+}
+button:focus-visible,
+input:focus-visible,
+textarea:focus-visible,
+select:focus-visible,
+a:focus-visible {
+	outline: 3px solid var(--color-border);
+	outline-offset: 3px;
+}
+@media (prefers-reduced-motion: reduce) {
+	*,
+	*::before,
+	*::after {
+		scroll-behavior: auto !important;
+		transition-duration: 0.01ms !important;
+		animation-duration: 0.01ms !important;
+	}
+}
