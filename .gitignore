@@ -1,0 +1,48 @@
+# build output
+dist/
+build/
+.output/
+
+# dependencies
+node_modules/
+
+# optional Python artwork tools
+.venv/
+__pycache__/
+
+# logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.clasp.json
+pnpm-debug.log*
+
+# environment variables
+.env
+.env.production
+
+# macOS-specific files
+.DS_Store
+
+.astro/
+
+# browser test output
+test-results/
+playwright-report/
+
+# Private gallery runtime state, eligibility and deployment secrets
+**/.wrangler/
+**/.dev.vars
+**/.dev.vars.*
+**/.env.*
+services/photo-gallery/private/
+services/photo-gallery/.eligibility-import-*.sql
+services/photo-gallery/.eligibility-revoke-*.sql
+services/photo-gallery/.wrangler-r2-upload-*.jsonc
+**/__pycache__/
+*.pyc
+
+private/
+assets-private/
+**/.env
+**/.dev.vars*
