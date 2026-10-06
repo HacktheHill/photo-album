@@ -390,3 +390,77 @@ test("browser storage failure does not prevent the album or restoration panel fr
 	await expect(page.getByRole("heading", { name: "No restore request was specified." })).toBeVisible();
 	expect(errors).toEqual([]);
 });
+
+test("viewer history restores the album position and nested dialogs keep scrolling locked", async ({ page }) => {
+	await routeAttendee(page);
+	await page.route("**/?action=events", route => route.fulfill({ json: {} }));
+	await page.route("**/?action=album", route =>
+		route.fulfill({
+			json: {
+				version: "1",
+				photos: Array.from({ length: 32 }, (_, index) => ({ ...photo, id: `opening-${index}` })),
+			},
+		}),
+	);
+	await page.goto("/");
+	const target = page.getByRole("button", { name: "View photo: Opening ceremony 19", exact: true });
+	await target.scrollIntoViewIfNeeded();
+	const scrollY = await page.evaluate(() => window.scrollY);
+	expect(scrollY).toBeGreaterThan(0);
+	await target.click();
+	await expect(page.getByRole("dialog", { name: "Opening ceremony" })).toBeVisible();
+	await expect.poll(() => page.evaluate(() => document.body.style.position)).toBe("fixed");
+	await page.getByRole("button", { name: "↓ Download", exact: true }).click();
+	await page.getByRole("button", { name: "Cancel", exact: true }).filter({ hasText: "Cancel" }).click();
+	await expect.poll(() => page.evaluate(() => document.body.style.position)).toBe("fixed");
+	await page.getByRole("button", { name: "Next photo", exact: true }).click();
+	await expect(page).toHaveURL(/photo=opening-19/);
+	await page.goBack();
+	await expect(page.getByRole("dialog")).toHaveCount(0);
+	await expect.poll(() => page.evaluate(() => document.body.style.position)).toBe("");
+	await expect.poll(() => page.evaluate(() => window.scrollY)).toBe(scrollY);
+	await page.goForward();
+	await expect(page.getByRole("dialog", { name: "Opening ceremony" })).toBeVisible();
+	await expect(page).toHaveURL(/photo=opening-19/);
+	await page.getByRole("button", { name: "Close viewer", exact: true }).click();
+	await expect(page.getByRole("dialog")).toHaveCount(0);
+	await expect.poll(() => page.evaluate(() => window.scrollY)).toBe(scrollY);
+});
+
+test("failed previews retry successfully without disturbing navigation", async ({ page }) => {
+	await routeAttendee(page);
+	await page.route("**/?action=events", route => route.fulfill({ json: {} }));
+	let attempts = 0;
+	await page.route("**/?action=preview&photo=opening-001", route => {
+		attempts += 1;
+		return attempts === 1
+			? route.fulfill({ status: 503, body: "temporarily unavailable" })
+			: route.fulfill({ contentType: "image/png", body: tinyPng });
+	});
+	await page.goto("/");
+	await page.getByRole("button", { name: "View photo: Opening ceremony 1", exact: true }).click();
+	await expect(page.getByText("This photo couldn’t load. Please try again.")).toBeVisible();
+	await page.getByRole("button", { name: "Try again", exact: true }).click();
+	await expect(page.getByText("This photo couldn’t load. Please try again.")).toHaveCount(0);
+	await expect(page.locator('[class*="viewerImageWrap"] img')).toBeVisible();
+	await expect.poll(() => attempts).toBe(2);
+});
+
+test("favourites persist after sign out and empty and category cards avoid redundant text", async ({ page }) => {
+	await routeAttendee(page);
+	await page.route("**/?action=events", route => route.fulfill({ json: {} }));
+	await page.route("**/?action=logout", route => route.fulfill({ json: {} }));
+	await page.goto("/");
+	await page.getByRole("button", { name: "My favourites 0", exact: true }).click();
+	await expect(page.getByText("Tap the heart on a photo to save it here.")).toBeVisible();
+	await page.getByRole("button", { name: "All photos 2", exact: true }).click();
+	await expect(page.getByText("0 views · 0 Downloads", { exact: true })).toHaveCount(0);
+	await page.getByRole("button", { name: "Add to favourites", exact: true }).first().click();
+	await page.getByRole("button", { name: "Opening ceremony 1", exact: true }).click();
+	await expect(page.locator('[class*="cardMeta"] strong')).toHaveCount(0);
+	await page.getByRole("button", { name: "Sign out", exact: true }).click();
+	await expect(page.locator("#photo-email")).toBeVisible();
+	await page.reload();
+	await page.getByRole("button", { name: "My favourites 1", exact: true }).click();
+	await expect(page.getByRole("button", { name: "View photo: Opening ceremony 1", exact: true })).toBeVisible();
+});

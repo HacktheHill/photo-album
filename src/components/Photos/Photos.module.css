@@ -275,11 +275,17 @@ button:disabled {
 	padding: clamp(1.5rem, 3vw, 3rem) 0 4rem;
 }
 .toolbar {
+	position: sticky;
+	top: 0;
+	z-index: 5;
+	padding: 0.75rem 0;
+	background: var(--color-album-surface);
 	display: grid;
 	gap: 1rem;
 	margin: 0 0 1rem;
 }
 .categoryNav {
+	flex-wrap: wrap;
 	display: flex;
 	gap: 0.5rem;
 	overflow-x: auto;
@@ -287,13 +293,14 @@ button:disabled {
 	scrollbar-width: thin;
 }
 .categoryNav button {
+	min-height: var(--control-height);
 	flex: none;
 	padding: 0.6rem 0.8rem;
 	border: 1px solid var(--color-control-border);
 	border-radius: 99px;
 	color: var(--color-muted);
 	background: #fff;
-	font-size: 0.78rem;
+	font-size: 0.86rem;
 	white-space: nowrap;
 }
 .categoryNav button span {
@@ -330,7 +337,7 @@ button:disabled {
 	padding: 0;
 	overflow: hidden;
 	border: 0;
-	background: #d9d5cf;
+	background: #eee9e2;
 }
 .photoButton img {
 	display: block;
@@ -340,7 +347,7 @@ button:disabled {
 	object-fit: contain;
 }
 .photoButton:hover {
-	background: #e9e3d9;
+	background: #f5efe6;
 }
 .viewLabel {
 	position: absolute;
@@ -378,12 +385,12 @@ button:disabled {
 }
 .cardMeta strong {
 	color: var(--color-ink);
-	font-size: 0.74rem;
+	font-size: 0.85rem;
 }
 .cardMeta span {
 	margin-top: 0.2rem;
 	color: #805044;
-	font-size: 0.68rem;
+	font-size: 0.75rem;
 }
 .favourite,
 .favouriteLarge {
@@ -391,9 +398,9 @@ button:disabled {
 	min-height: var(--control-height);
 	flex: none;
 	border: 0;
-	color: var(--color-muted);
+	color: var(--color-ink);
 	background: transparent;
-	font-size: 1.25rem;
+	font-size: 1.4rem;
 }
 .favouriteOn {
 	color: var(--color-accent);
@@ -716,5 +723,24 @@ button:disabled {
 		grid-row: 2;
 		padding: 0.25rem 0 0.9rem;
 		font-size: 1.5rem;
+	}
+}
+
+.previewStatus {
+	position: absolute;
+	inset: 0;
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	justify-content: center;
+	gap: 0.75rem;
+	padding: 3rem;
+	text-align: center;
+	color: var(--color-cream);
+}
+@media (max-width: 760px) {
+	.categoryNav {
+		flex-wrap: nowrap;
+		mask-image: linear-gradient(to right, #000 calc(100% - 1rem), transparent);
 	}
 }
