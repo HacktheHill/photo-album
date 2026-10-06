@@ -260,8 +260,10 @@ def main() -> int:
     parser.add_argument("command", choices=("dry-run", "create-inventory", "upload", "verify"))
     parser.add_argument("--inventory", required=True, type=Path)
     parser.add_argument("--assets-root", type=Path)
-    parser.add_argument("--output", type=Path, default=Path("upload-inventory.json"))
-    parser.add_argument("--checkpoint", type=Path, default=Path("upload-checkpoint.json"))
+    # Defaults sit beside the private inventory, never in the working directory
+    # (usually this checkout).
+    parser.add_argument("--output", type=Path, help="default: upload-inventory.json beside --inventory")
+    parser.add_argument("--checkpoint", type=Path, help="default: upload-checkpoint.json beside --inventory")
     parser.add_argument("--bucket")
     parser.add_argument("--endpoint-url")
     parser.add_argument("--region")
@@ -269,6 +271,8 @@ def main() -> int:
     parser.add_argument("--sample-count", type=int, default=16)
     parser.add_argument("--all-bytes", action="store_true")
     args = parser.parse_args()
+    args.output = args.output or args.inventory.parent / "upload-inventory.json"
+    args.checkpoint = args.checkpoint or args.inventory.parent / "upload-checkpoint.json"
     inventory, expected = load_inventory(args.inventory)
     if args.command == "dry-run":
         return dry_run(expected, args.output)

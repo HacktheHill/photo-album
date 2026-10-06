@@ -39,6 +39,12 @@ services/photo-gallery/private/
 services/photo-gallery/.eligibility-import-*.sql
 services/photo-gallery/.eligibility-revoke-*.sql
 services/photo-gallery/.wrangler-r2-upload-*.jsonc
+# Private photo pipeline outputs, if a path ever points inside the checkout
+upload-inventory.json
+upload-checkpoint.json
+pipeline-inventory.json
+browser-manifest.json
+r2-verification.json
 **/__pycache__/
 *.pyc
 

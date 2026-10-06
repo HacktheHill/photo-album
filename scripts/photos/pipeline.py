@@ -297,8 +297,8 @@ def build(args: argparse.Namespace) -> int:
             "version": item["version"],
             "width": item["dimensions"]["width"],
             "height": item["dimensions"]["height"],
-            "thumbnail": {"url": f"/api/photos/{item['id']}/thumbnail", "bytes": item["variants"]["thumbnail"]["size"], **item["variants"]["thumbnail"]["dimensions"]},
-            "preview": {"url": f"/api/photos/{item['id']}/preview", "bytes": item["variants"]["preview"]["size"], **item["variants"]["preview"]["dimensions"]},
+            "thumbnail": {"url": f"/?action=thumbnail&photo={item['id']}", "bytes": item["variants"]["thumbnail"]["size"], **item["variants"]["thumbnail"]["dimensions"]},
+            "preview": {"url": f"/?action=preview&photo={item['id']}", "bytes": item["variants"]["preview"]["size"], **item["variants"]["preview"]["dimensions"]},
             "downloads": {
                 "full": {"width": item["variants"]["full"]["dimensions"]["width"], "height": item["variants"]["full"]["dimensions"]["height"], "bytes": item["variants"]["full"]["size"]},
                 "quick": {"width": item["variants"]["quick"]["dimensions"]["width"], "height": item["variants"]["quick"]["dimensions"]["height"], "bytes": item["variants"]["quick"]["size"]},
