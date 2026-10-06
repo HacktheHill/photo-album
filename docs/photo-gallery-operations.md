@@ -30,6 +30,12 @@ Required secrets are `OTP_HMAC_SECRET`, `SESSION_HMAC_SECRET`, `AWS_ACCESS_KEY_I
 
 Cloudflare Access protects `/restore` and its descendants only. Its Google Workspace policy permits `@ctn-rtc.org` accounts. The Worker independently verifies the signed assertion and requires CSRF protection for restoration; attendee login does not grant restoration access.
 
+## Album eligibility
+
+Access is the union of attended hacker application rows, all addresses in the approved Devpost registrant/project and volunteer exports, CTN members, and explicitly approved addresses. An address in another approved source keeps access even if its hacker application is not marked attended. The live application Sheet supplies attendance; the CSV does not.
+
+The 2026-10-06 reconciliation verified 530 active addresses and revoked 549 addresses included solely by non-attended hacker application rows. Source exports and the verification report remain private, outside Git. Imports are additive: reconcile sources before revoking access and revoke sessions with an excluded account.
+
 ## Local data
 
 Wrangler development uses local D1/R2 state. From `services/photo-gallery/`, apply local migrations:
