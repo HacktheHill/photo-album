@@ -670,10 +670,10 @@ function Album({
 												<span>
 													{[
 														photo.activity?.views
-															? `${photo.activity.views} ${t.views}`
+															? `${photo.activity.views} ${photo.activity.views === 1 ? t.oneView : t.views}`
 															: "",
 														photo.activity?.downloadRequests
-															? `${photo.activity.downloadRequests} ${t.downloadRequests}`
+															? `${photo.activity.downloadRequests} ${photo.activity.downloadRequests === 1 ? t.oneDownload : t.downloadRequests}`
 															: "",
 													]
 														.filter(Boolean)
