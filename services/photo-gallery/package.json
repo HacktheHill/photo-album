@@ -4,7 +4,7 @@
 	"type": "module",
 	"scripts": {
 		"dev": "wrangler dev",
-		"deploy:dry-run": "wrangler deploy --dry-run --env=\"\"",
+		"deploy:dry-run": "wrangler deploy --dry-run --config wrangler.jsonc --env=\"\" --no-autoconfig && wrangler deploy --dry-run --config wrangler.jsonc --env production --no-autoconfig",
 		"types": "wrangler types",
 		"typecheck": "tsc --noEmit",
 		"test": "vitest run",
