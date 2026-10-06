@@ -791,14 +791,22 @@ describe("photo gallery in the Workers runtime", () => {
 		expect(reused.status).toBe(401);
 	});
 
-	it("queues French OTP subject and text without changing the generic API response", async () => {
-		const code = await requestCode("fr");
+	it.each(["en", "fr"] as const)("queues consistent %s photo album login emails", async lang => {
+		const code = await requestCode(lang);
 		const outbox = await env.DB.prepare(
 			"SELECT payload_json as payload FROM notification_outbox WHERE kind='otp' ORDER BY created_at DESC LIMIT 1",
 		).first<{ payload: string }>();
 		const payload = JSON.parse(outbox?.payload ?? "{}") as { subject: string; text: string };
-		expect(payload.subject).toBe("Code de connexion à la galerie photo Hack the Hill");
-		expect(payload.text).toBe(`Votre code de connexion est ${code}. Il expire dans dix minutes.`);
+		expect(payload.subject).toBe(
+			lang === "fr"
+				? "Code de connexion à l’album photo de Hack the Hill III"
+				: "Hack the Hill III photo album sign-in code",
+		);
+		expect(payload.text).toBe(
+			lang === "fr"
+				? `Votre code de connexion est ${code}. Il expire dans dix minutes.`
+				: `Your sign-in code is ${code}. It expires in ten minutes.`,
+		);
 	});
 
 	it("serializes concurrent OTP requests through the cooldown and budget gate", async () => {

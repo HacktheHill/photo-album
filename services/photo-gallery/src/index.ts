@@ -933,12 +933,12 @@ async function handle(request: Request, env: Env, ctx: ExecutionContext): Promis
 				const payload = french
 					? {
 							to: email,
-							subject: "Code de connexion à la galerie photo Hack the Hill",
+							subject: "Code de connexion à l’album photo de Hack the Hill III",
 							text: `Votre code de connexion est ${code}. Il expire dans dix minutes.`,
 						}
 					: {
 							to: email,
-							subject: "Hack the Hill photo gallery sign-in code",
+							subject: "Hack the Hill III photo album sign-in code",
 							text: `Your sign-in code is ${code}. It expires in ten minutes.`,
 						};
 				statements.push(
