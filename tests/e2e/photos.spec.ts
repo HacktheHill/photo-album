@@ -141,7 +141,9 @@ test("email code request supports paste and verifies through the API contract", 
 	expect(eventBodies.filter(event => event.albumVisit)).toHaveLength(1);
 });
 
-test("download opens bilingual terms and cancellation makes no download request", async ({ page }) => {
+test("download shows complete terms in the selected language and cancellation makes no download request", async ({
+	page,
+}) => {
 	await routeAttendee(page);
 	await page.route("**/?action=events", route => route.fulfill({ json: {} }));
 	await page.goto("/");
@@ -152,9 +154,21 @@ test("download opens bilingual terms and cancellation makes no download request"
 		if (new URL(request.url()).searchParams.get("action") === "download") downloadRequests++;
 	});
 	await page.getByRole("button", { name: /Download/ }).click();
-	await expect(page.getByRole("heading", { name: "Before you download" })).toBeVisible();
-	await expect(page.getByText("English", { exact: true })).toBeVisible();
-	await expect(page.getByRole("heading", { name: "Français" })).toBeVisible();
+	const terms = page.getByRole("dialog", { name: "Photo use and licensing terms" });
+	await expect(terms.getByRole("heading", { level: 2 })).toHaveCount(1);
+	await expect(terms.getByRole("heading", { level: 3 })).toHaveText([
+		"Permitted Use",
+		"Consent of Persons Depicted",
+		"Restrictions",
+		"Rights of Persons Depicted",
+		"Withdrawal or Rights Issues",
+	]);
+	await expect(terms.getByText("English", { exact: true })).toHaveCount(0);
+	await expect(terms.getByText("Français", { exact: true })).toHaveCount(0);
+	await expect(
+		terms.getByText("© 2026 Capital Technology Network. All rights reserved.", { exact: true }),
+	).toBeVisible();
+	await expect(terms.getByText("Utilisations permises", { exact: true })).toHaveCount(0);
 	await page.keyboard.press("Tab");
 	await expectTopDialogContainsFocus(page);
 	await page.keyboard.press("Shift+Tab");
@@ -165,6 +179,21 @@ test("download opens bilingual terms and cancellation makes no download request"
 	await page.keyboard.press("Escape");
 	await expect(page.getByRole("dialog")).toHaveCount(0);
 	expect(downloadRequests).toBe(0);
+	await page.getByRole("button", { name: "Français", exact: true }).click();
+	await page.getByRole("button", { name: /Voir la photo: IMG_0001/ }).click();
+	await page.getByRole("button", { name: /Télécharger/ }).click();
+	const frenchTerms = page.getByRole("dialog", { name: "Conditions d’utilisation et de licence" });
+	await expect(frenchTerms.getByRole("heading", { level: 3 })).toHaveText([
+		"Utilisations permises",
+		"Consentement des personnes représentées",
+		"Restrictions",
+		"Droits des personnes représentées",
+		"Retrait ou questions relatives aux droits",
+	]);
+	await expect(
+		frenchTerms.getByText("© 2026 Réseau technologique de la capitale. Tous droits réservés.", { exact: true }),
+	).toBeVisible();
+	await expect(frenchTerms.getByText("Permitted Use", { exact: true })).toHaveCount(0);
 });
 
 test("removal dialog traps focus and Escape restores the viewer", async ({ page }) => {
