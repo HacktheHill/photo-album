@@ -107,10 +107,10 @@ test("email code request supports paste and verifies through the API contract", 
 	await page.route("**/api/album", route => route.fulfill({ json: { version: "1", photos: [photo] } }));
 	await page.goto("/");
 	await page.locator("#photo-email").fill("attendee@example.org");
-	await page.getByRole("button", { name: "Send code" }).click();
+	await page.getByRole("button", { name: "Log in" }).click();
 	await expect(page.locator("#photo-code")).toBeVisible();
 	await page.locator("#photo-code").fill("12345678");
-	await page.getByRole("button", { name: "Open album" }).click();
+	await page.getByRole("button", { name: "Log in" }).click();
 	await expect(page.getByRole("heading", { name: "Photo album" })).toBeVisible();
 	await expect.poll(() => eventBodies.filter(event => event.albumVisit).length).toBe(1);
 	expect(eventBodies.find(event => event.albumVisit)).toEqual({ photoIds: [], albumVisit: true });
