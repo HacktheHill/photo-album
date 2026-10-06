@@ -40,6 +40,8 @@ async function routeAttendee(page: Page, authenticated = true) {
 	);
 	if (authenticated) {
 		await routePhotoMedia(page);
+		// Default sink for view events; tests that inspect them register their own route.
+		await page.route("**/?action=events", route => route.fulfill({ json: {} }));
 		await page.route("**/?action=album", route =>
 			route.fulfill({
 				json: {
@@ -268,7 +270,7 @@ test("logout failure keeps the authenticated album and offers the same retry act
 	await page.route("**/?action=logout", route => route.fulfill({ status: 503, json: { error: "temporary outage" } }));
 	await page.goto("/");
 	await page.getByRole("button", { name: "Sign out" }).click();
-	await expect(page.getByRole("alert")).toContainText("temporary outage");
+	await expect(page.getByRole("alert")).toContainText("Something went wrong");
 	await expect(page.getByRole("heading", { name: "Photo album" })).toBeVisible();
 	await expect(page.getByRole("button", { name: "Sign out" })).toBeVisible();
 });
@@ -453,7 +455,7 @@ test("favourites persist after sign out and empty and category cards avoid redun
 	await page.getByRole("button", { name: "My favourites 0", exact: true }).click();
 	await expect(page.getByText("Tap the heart on a photo to save it here.")).toBeVisible();
 	await page.getByRole("button", { name: "All photos 2", exact: true }).click();
-	await expect(page.getByText("0 views · 0 Downloads", { exact: true })).toHaveCount(0);
+	await expect(page.getByText("0 views · 0 downloads", { exact: true })).toHaveCount(0);
 	await page.getByRole("button", { name: "Add to favourites", exact: true }).first().click();
 	await page.getByRole("button", { name: "Opening ceremony 1", exact: true }).click();
 	await expect(page.locator('[class*="cardMeta"] strong')).toHaveCount(0);
@@ -462,4 +464,34 @@ test("favourites persist after sign out and empty and category cards avoid redun
 	await page.reload();
 	await page.getByRole("button", { name: "My favourites 1", exact: true }).click();
 	await expect(page.getByRole("button", { name: "View photo: Opening ceremony 1", exact: true })).toBeVisible();
+});
+
+test("a refused download shows a message instead of navigating to the error", async ({ page }) => {
+	await routeAttendee(page);
+	await page.route("**/?action=events", route => route.fulfill({ json: {} }));
+	await page.route("**/?action=licence", route => route.fulfill({ json: { version: "2026-10-06" } }));
+	const ranges: (string | undefined)[] = [];
+	await page.route(/\/\?action=download&/, route => {
+		ranges.push(route.request().headers().range);
+		return route.fulfill({ status: 404, json: { error: "Not found." } });
+	});
+	await page.goto("/");
+	await page.getByRole("button", { name: /View photo: Opening ceremony 1/ }).click();
+	await page.getByRole("button", { name: "↓ Download", exact: true }).click();
+	await page.getByRole("button", { name: /Continue to download · Full quality JPEG/ }).click();
+	await expect(page.getByRole("alert")).toContainText("This photo is no longer available.");
+	expect(ranges).toEqual(["bytes=0-0"]);
+	await expect(page).toHaveURL(/\/\?photo=opening-001$/);
+});
+
+test("sign-in errors use the selected language", async ({ page }) => {
+	await routeAttendee(page, false);
+	await page.route("**/?action=request-code", route =>
+		route.fulfill({ status: 429, json: { error: "Please wait before requesting another code." } }),
+	);
+	await page.goto("/");
+	await page.getByRole("button", { name: "Français" }).click();
+	await page.locator("#photo-email").fill("attendee@example.org");
+	await page.getByRole("button", { name: "Se connecter" }).click();
+	await expect(page.getByRole("alert")).toHaveText("Veuillez patienter avant de demander un autre code.");
 });

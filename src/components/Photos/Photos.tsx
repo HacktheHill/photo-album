@@ -15,6 +15,13 @@ import styles from "./Photos.module.css";
 
 type Category = "all" | "favourites" | string;
 type Notice = { kind: "error" | "success" | "info"; text: string } | null;
+// Server error text is English-only; the UI chooses localized copy from the status.
+class ApiError extends Error {
+	constructor(readonly status: number) {
+		super(`HTTP ${status}`);
+	}
+}
+const statusOf = (error: unknown) => (error instanceof ApiError ? error.status : 0);
 const api = async <T,>(path: string, init?: RequestInit): Promise<T> => {
 	const response = await fetch(path, {
 		credentials: "same-origin",
@@ -25,9 +32,8 @@ const api = async <T,>(path: string, init?: RequestInit): Promise<T> => {
 			...init?.headers,
 		},
 	});
-	const body = (await response.json().catch(() => ({}))) as T & { error?: string };
-	if (!response.ok) throw new Error(body.error || `HTTP ${response.status}`);
-	return body;
+	if (!response.ok) throw new ApiError(response.status);
+	return (await response.json().catch(() => ({}))) as T;
 };
 
 function csrfHeaders(session: PhotoSession): Record<string, string> {
@@ -261,8 +267,8 @@ export default function Photos() {
 		setNotice(null);
 		try {
 			await api("/?action=logout", { method: "POST", body: "{}", headers: csrfHeaders(session) });
-		} catch (error) {
-			setNotice({ kind: "error", text: error instanceof Error ? error.message : t.serviceError });
+		} catch {
+			setNotice({ kind: "error", text: t.serviceError });
 			return;
 		}
 		setManifest(null);
@@ -400,7 +406,7 @@ function Auth({
 			setSeconds(60);
 			setNotice({ kind: "info", text: t.unknown });
 		} catch (error) {
-			setNotice({ kind: "error", text: error instanceof Error ? error.message : t.serviceError });
+			setNotice({ kind: "error", text: statusOf(error) === 429 ? t.rateLimited : t.serviceError });
 		} finally {
 			setBusy(false);
 		}
@@ -418,7 +424,7 @@ function Auth({
 				}),
 			);
 		} catch (error) {
-			setNotice({ kind: "error", text: error instanceof Error ? error.message : t.serviceError });
+			setNotice({ kind: "error", text: statusOf(error) === 401 ? t.invalidCode : t.serviceError });
 		} finally {
 			setBusy(false);
 		}
@@ -941,12 +947,26 @@ function LicenceDialog({
 				body: JSON.stringify({ version: LICENCE_VERSION }),
 				headers: csrfHeaders(session),
 			});
-			const requestId = crypto.randomUUID();
-			window.location.assign(
-				`/?action=download&photo=${encodeURIComponent(photo.id)}&format=${format}&requestId=${requestId}`,
-			);
+			const url = `/?action=download&photo=${encodeURIComponent(photo.id)}&format=${format}&requestId=${crypto.randomUUID()}`;
+			// Check one byte first so a refusal shows a message instead of a raw JSON
+			// page. Reusing the request ID makes the real download an idempotent retry.
+			const check = await fetch(url, { credentials: "same-origin", headers: { Range: "bytes=0-0" } });
+			void check.body?.cancel();
+			if (!check.ok) throw new ApiError(check.status);
+			window.location.assign(url);
 		} catch (error) {
-			setNotice({ kind: "error", text: error instanceof Error ? error.message : t.serviceError });
+			const status = statusOf(error);
+			setNotice({
+				kind: "error",
+				text:
+					status === 404
+						? t.unavailable
+						: status === 401
+							? t.sessionExpired
+							: status === 409 || status === 428
+								? t.licenceChanged
+								: t.serviceError,
+			});
 			setBusy(false);
 		}
 	};
@@ -1011,6 +1031,8 @@ function RemovalDialog({
 		if (!explanation.trim()) return;
 		setBusy(true);
 		setFailure(null);
+		// Edits keep the same ID: if an earlier attempt reached the server, the
+		// retry returns that request instead of creating a second one.
 		requestId.current ||= crypto.randomUUID();
 		try {
 			await api(`/?action=remove&photo=${encodeURIComponent(photo.id)}`, {
@@ -1019,8 +1041,9 @@ function RemovalDialog({
 				headers: csrfHeaders(session),
 			});
 			onHidden(photo);
-		} catch {
-			setFailure(t.serviceError);
+		} catch (error) {
+			const status = statusOf(error);
+			setFailure(status === 429 ? t.removalLimit : status === 404 ? t.unavailable : t.serviceError);
 			setBusy(false);
 		}
 	};
@@ -1043,10 +1066,7 @@ function RemovalDialog({
 						id="removal-explanation"
 						rows={5}
 						value={explanation}
-						onChange={event => {
-							setExplanation(event.target.value);
-							requestId.current = null;
-						}}
+						onChange={event => setExplanation(event.target.value)}
 						required
 					/>
 					<div className={styles.dialogActions}>
