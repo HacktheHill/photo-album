@@ -64,7 +64,7 @@ for (const photo of manifest.photos) {
 	const variants = photo.variants ?? {};
 	const dimensions = photo.dimensions ?? { width: photo.width, height: photo.height };
 	sql.push(
-		`INSERT INTO photos(id,category,filename,version,status,thumbnail_key,preview_key,full_key,width,height,created_at,updated_at) VALUES(${quote(photo.id)},${quote(photo.category)},${quote(photo.filename)},1,'published',${quote(variants.thumbnail.objectKey ?? variants.thumbnail.key)},${quote(variants.preview.objectKey ?? variants.preview.key)},${quote(variants.full.objectKey ?? variants.full.key)},${Number(dimensions.width)},${Number(dimensions.height)},${now},${now}) ON CONFLICT(id) DO NOTHING;`,
+		`INSERT INTO photos(id,category,filename,version,status,width,height,created_at,updated_at) VALUES(${quote(photo.id)},${quote(photo.category)},${quote(photo.filename)},1,'published',${Number(dimensions.width)},${Number(dimensions.height)},${now},${now}) ON CONFLICT(id) DO NOTHING;`,
 	);
 	for (const format of ["thumbnail", "preview", "full"]) {
 		const variant = variants[format];
@@ -114,7 +114,7 @@ if (
 	if (!Array.isArray(licence.en) || !Array.isArray(licence.fr)) throw new Error("Licence must contain en[] and fr[]");
 	await env.DB.batch([
 		env.DB.prepare(
-			"INSERT INTO licence_versions(version,en_json,fr_json,current,created_at) VALUES(?,?,?,?,?) ON CONFLICT(version) DO UPDATE SET en_json=excluded.en_json,fr_json=excluded.fr_json,current=1",
+			"INSERT INTO licence_versions(version,en_json,fr_json,current,created_at) VALUES(?,?,?,?,?) ON CONFLICT(version) DO UPDATE SET current=1",
 		).bind(licenceVersion, JSON.stringify(licence.en), JSON.stringify(licence.fr), 1, now),
 		env.DB.prepare("UPDATE licence_versions SET current=0 WHERE current=1 AND version<>?").bind(licenceVersion),
 	]);

@@ -3,7 +3,7 @@
 
 The generated SQL contains only public photo/variant metadata and object keys.
 Source paths, editing notes and private inventory roots never enter the seed.
-It targets services/photo-gallery/migrations/0001_initial.sql, where the
+It targets the current gallery schema, where the
 publication revision is an integer (the content version hash remains in the
 private inventory and object path).
 
@@ -42,16 +42,13 @@ def render_sql(inventory: dict, created_at: int = 0) -> str:
     for photo in photos:
         variants = photo["variants"]
         lines.append(
-            "INSERT INTO photos (id, category, filename, version, status, thumbnail_key, preview_key, full_key, width, height, created_at, updated_at) VALUES ("
+            "INSERT INTO photos (id, category, filename, version, status, width, height, created_at, updated_at) VALUES ("
             + ", ".join([
                 quote(photo["id"]),
                 quote(photo["category"]),
                 quote(photo["filename"]),
                 "1",
                 "'published'",
-                quote(variants["thumbnail"]["objectKey"]),
-                quote(variants["preview"]["objectKey"]),
-                quote(variants["full"]["objectKey"]),
                 integer(photo["dimensions"]["width"]),
                 integer(photo["dimensions"]["height"]),
                 integer(created_at),

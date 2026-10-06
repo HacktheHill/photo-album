@@ -99,7 +99,7 @@ test("email code request supports paste and verifies through the API contract", 
 			},
 		});
 	});
-	const eventBodies: Array<{ photoIds: string[]; albumVisit: boolean }> = [];
+	const eventBodies: Array<{ photoIds: string[] }> = [];
 	await page.route("**/?action=events", async route => {
 		eventBodies.push(await route.request().postDataJSON());
 		await route.fulfill({ json: {} });
@@ -113,8 +113,7 @@ test("email code request supports paste and verifies through the API contract", 
 	await page.locator("#photo-code").fill("12345678");
 	await page.getByRole("button", { name: "Log in" }).click();
 	await expect(page.getByRole("heading", { name: "Photo album" })).toBeVisible();
-	await expect.poll(() => eventBodies.filter(event => event.albumVisit).length).toBe(1);
-	expect(eventBodies.find(event => event.albumVisit)).toEqual({ photoIds: [], albumVisit: true });
+	expect(eventBodies).toHaveLength(0);
 	await expect
 		.poll(() =>
 			page
@@ -130,7 +129,7 @@ test("email code request supports paste and verifies through the API contract", 
 	await page.getByRole("button", { name: "Français" }).click();
 	await expect(page.getByRole("heading", { name: "Album photo" })).toBeVisible();
 	await expect(page.getByRole("searchbox")).toHaveCount(0);
-	expect(eventBodies.filter(event => event.albumVisit)).toHaveLength(1);
+	expect(eventBodies).toHaveLength(0);
 });
 
 test("download shows complete terms in the selected language and cancellation makes no download request", async ({

@@ -527,7 +527,6 @@ function Album({
 	);
 	const [terms, setTerms] = useState<AlbumPhoto | null>(null);
 	const [removal, setRemoval] = useState<AlbumPhoto | null>(null);
-	const visitSent = useRef(false);
 	useEffect(() => {
 		const previousRestoration = window.history.scrollRestoration;
 		window.history.scrollRestoration = "manual";
@@ -543,15 +542,6 @@ function Album({
 			window.history.scrollRestoration = previousRestoration;
 		};
 	}, [manifest.photos]);
-	useEffect(() => {
-		if (visitSent.current) return;
-		visitSent.current = true;
-		void api("/?action=events", {
-			method: "POST",
-			body: JSON.stringify({ photoIds: [], albumVisit: true }),
-			headers: csrfHeaders(session),
-		}).catch(() => undefined);
-	}, [session]);
 	useEffect(() => {
 		const stillAvailable = (photo: AlbumPhoto | null) =>
 			!photo || manifest.photos.some(item => item.id === photo.id);
@@ -843,7 +833,7 @@ function Viewer({
 				queue.current.clear();
 				void api("/?action=events", {
 					method: "POST",
-					body: JSON.stringify({ photoIds: ids, albumVisit: false }),
+					body: JSON.stringify({ photoIds: ids }),
 					headers: csrfHeaders(session),
 				}).catch(() => undefined);
 			}

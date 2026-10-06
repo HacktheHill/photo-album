@@ -2,7 +2,7 @@ import { publicHighlights } from "./public-highlights";
 import { AwsClient } from "aws4fetch";
 import { createRemoteJWKSet, jwtVerify, type JWTPayload } from "jose";
 
-type Account = { id: string; email: string; role: "viewer" | "admin"; active: number };
+type Account = { id: string; email: string; active: number };
 type Session = Account & {
 	tokenHash: string;
 	csrfHash: string;
@@ -210,7 +210,7 @@ function escapeHtml(value: string): string {
 }
 
 async function accountForEmail(env: Env, email: string): Promise<Account | null> {
-	return env.DB.prepare("SELECT id,email,role,active FROM accounts WHERE email_hash=? AND active=1 LIMIT 1")
+	return env.DB.prepare("SELECT id,email,active FROM accounts WHERE email_hash=? AND active=1 LIMIT 1")
 		.bind(await hmac(env.OTP_HMAC_SECRET, email))
 		.first<Account>();
 }
@@ -229,7 +229,7 @@ async function sessionForRequest(request: Request, env: Env): Promise<Session | 
 	if (!token) return null;
 	const tokenHash = await hmac(env.SESSION_HMAC_SECRET, token);
 	const row = await env.DB.prepare(
-		"SELECT s.token_hash as tokenHash,s.csrf_hash as csrfHash,s.expires_at as expiresAt,s.licence_version as licenceVersion,a.id,a.email,a.role,a.active FROM sessions s JOIN accounts a ON a.id=s.account_id WHERE s.token_hash=? AND s.revoked_at IS NULL LIMIT 1",
+		"SELECT s.token_hash as tokenHash,s.csrf_hash as csrfHash,s.expires_at as expiresAt,s.licence_version as licenceVersion,a.id,a.email,a.active FROM sessions s JOIN accounts a ON a.id=s.account_id WHERE s.token_hash=? AND s.revoked_at IS NULL LIMIT 1",
 	)
 		.bind(tokenHash)
 		.first<Session>();
@@ -362,17 +362,19 @@ async function removalNotification(
 	html: string;
 } | null> {
 	const row = await env.DB.prepare(
-		"SELECT c.id,c.photo_id as photoId,p.filename,p.category,p.version FROM removal_cases c JOIN photos p ON p.id=c.photo_id WHERE c.id=? AND c.status='pending' LIMIT 1",
+		"SELECT c.id,c.photo_id as photoId,c.explanation,p.filename,p.category,p.version FROM removal_requests c JOIN photos p ON p.id=c.photo_id WHERE c.id=? AND c.status='pending' LIMIT 1",
 	)
 		.bind(caseId)
-		.first<{ id: string; photoId: string; filename: string; category: string; version: number }>();
+		.first<{
+			id: string;
+			photoId: string;
+			filename: string;
+			category: string;
+			version: number;
+			explanation: string;
+		}>();
 	if (!row) return null;
-	const reports = await env.DB.prepare(
-		"SELECT explanation FROM removal_reports WHERE case_id=? AND status='pending' ORDER BY created_at,id",
-	)
-		.bind(caseId)
-		.all<{ explanation: string }>();
-	const reasons = reports.results.map(report => report.explanation.trim()).filter(Boolean);
+	const reasons = [row.explanation.trim()].filter(Boolean);
 	const origin = configuredOrigin(env);
 	const reviewUrl = `${origin ?? ""}/restore?case=${encodeURIComponent(caseId)}&version=${encodeURIComponent(String(row.version))}`;
 	const reasonText = reasons.length ? reasons.join("\n\n") : "(No reason supplied.)";
@@ -607,12 +609,10 @@ async function downloadResponse(request: Request, env: Env, id: string): Promise
 	}
 	if (inserted.meta.changes > 0) {
 		const day = new Date().toISOString().slice(0, 10);
-		const full = format === "full" ? 1 : 0;
-		const quick = format === "quick" ? 1 : 0;
 		await env.DB.prepare(
-			"INSERT INTO daily_aggregates(day,photo_id,downloads,full_downloads,quick_downloads) VALUES(?,?,1,?,?) ON CONFLICT(day,photo_id) DO UPDATE SET downloads=downloads+1,full_downloads=full_downloads+excluded.full_downloads,quick_downloads=quick_downloads+excluded.quick_downloads",
+			"INSERT INTO daily_aggregates(day,photo_id,downloads) VALUES(?,?,1) ON CONFLICT(day,photo_id) DO UPDATE SET downloads=downloads+1",
 		)
-			.bind(day, id, full, quick)
+			.bind(day, id)
 			.run();
 	}
 	const headers = new Headers({
@@ -637,7 +637,6 @@ async function removal(request: Request, env: Env, id: string, ctx: ExecutionCon
 	if (!sessionResult) return error("Authentication required.", 401);
 	if (!(await requireCsrf(request, env, sessionResult.session))) return error("Invalid CSRF token.", 403);
 	const body = await boundedJson(request);
-	if (body.albumVisit !== undefined && typeof body.albumVisit !== "boolean") return error("Invalid albumVisit.", 400);
 	const explanation = typeof body.explanation === "string" ? body.explanation.trim() : "";
 	const reqId = requestId(body.requestId);
 	if (!explanation || explanation.length > 2000 || !reqId)
@@ -648,7 +647,7 @@ async function removal(request: Request, env: Env, id: string, ctx: ExecutionCon
 	if (!photo) return error("Not found.", 404);
 	const caseId = (await digest(`case:${sessionResult.session.id}:${id}:${reqId}`)).slice(0, 42);
 	const existing = await env.DB.prepare(
-		"SELECT case_id as caseId FROM removal_reports WHERE photo_id=? AND requester_account_id=? AND request_id=? LIMIT 1",
+		"SELECT id as caseId FROM removal_requests WHERE photo_id=? AND requester_account_id=? AND request_id=? LIMIT 1",
 	)
 		.bind(id, sessionResult.session.id, reqId)
 		.first<{ caseId: string }>();
@@ -657,7 +656,6 @@ async function removal(request: Request, env: Env, id: string, ctx: ExecutionCon
 	const now = Date.now();
 	const reviewOrigin = configuredOrigin(env);
 	const reviewUrl = `${reviewOrigin ?? ""}/restore?case=${encodeURIComponent(caseId)}&version=${encodeURIComponent(String(photo.version + 1))}`;
-	const reportId = await digest(`report:${caseId}`);
 	const outboxPayload = JSON.stringify({
 		to: String(env.MODERATOR_EMAILS),
 		subject: `Photo removal request / Demande de retrait ${caseId}`,
@@ -667,15 +665,16 @@ async function removal(request: Request, env: Env, id: string, ctx: ExecutionCon
 	});
 	const hourAgo = now - 60 * 60 * 1000;
 	// The conditional INSERT is the quota gate. It runs in the same D1 batch as
-	// report creation, so parallel requests cannot both pass a pre-count.
+	// notification creation, so parallel requests cannot both pass a pre-count.
 	const results = await env.DB.batch([
 		env.DB.prepare(
-			"INSERT OR IGNORE INTO removal_cases(id,photo_id,requester_account_id,explanation,status,photo_version,cross_channel_reviewed,created_at,updated_at) SELECT ?,?,?,?,'pending',?,0,?,? WHERE (SELECT COUNT(*) FROM removal_reports WHERE requester_account_id=? AND created_at>=?) < ? AND (SELECT COUNT(*) FROM removal_reports WHERE requester_account_id=? AND photo_id=? AND created_at>=?) < ?",
+			"INSERT OR IGNORE INTO removal_requests(id,photo_id,requester_account_id,explanation,request_id,status,photo_version,created_at,updated_at) SELECT ?,?,?,?,?,'pending',?,?,? WHERE (SELECT COUNT(*) FROM removal_requests WHERE requester_account_id=? AND created_at>=?) < ? AND (SELECT COUNT(*) FROM removal_requests WHERE requester_account_id=? AND photo_id=? AND created_at>=?) < ?",
 		).bind(
 			caseId,
 			id,
 			sessionResult.session.id,
 			explanation,
+			reqId,
 			photo.version + 1,
 			now,
 			now,
@@ -688,26 +687,12 @@ async function removal(request: Request, env: Env, id: string, ctx: ExecutionCon
 			REPORT_PHOTO_LIMIT,
 		),
 		env.DB.prepare(
-			"INSERT OR IGNORE INTO removal_reports(id,case_id,photo_id,requester_account_id,explanation,request_id,status,photo_version,created_at) SELECT ?,?,?,?,?,?,?,?,? WHERE EXISTS (SELECT 1 FROM removal_cases WHERE id=? AND status='pending')",
-		).bind(
-			reportId,
-			caseId,
-			id,
-			sessionResult.session.id,
-			explanation,
-			reqId,
-			"pending",
-			photo.version + 1,
-			now,
-			caseId,
-		),
-		env.DB.prepare(
-			"INSERT OR IGNORE INTO notification_outbox(id,kind,payload_json,attempts,available_at,created_at) SELECT ?,'removal',?,0,?,? WHERE EXISTS (SELECT 1 FROM removal_reports WHERE id=? AND status='pending')",
-		).bind(outboxId, outboxPayload, now, now, reportId),
+			"INSERT OR IGNORE INTO notification_outbox(id,kind,payload_json,attempts,available_at,created_at) SELECT ?,'removal',?,0,?,? WHERE EXISTS (SELECT 1 FROM removal_requests WHERE id=? AND status='pending')",
+		).bind(outboxId, outboxPayload, now, now, caseId),
 	]);
-	if (!results[1]?.meta.changes) {
+	if (!results[0]?.meta.changes) {
 		const raced = await env.DB.prepare(
-			"SELECT case_id as caseId FROM removal_reports WHERE photo_id=? AND requester_account_id=? AND request_id=? LIMIT 1",
+			"SELECT id as caseId FROM removal_requests WHERE photo_id=? AND requester_account_id=? AND request_id=? LIMIT 1",
 		)
 			.bind(id, sessionResult.session.id, reqId)
 			.first<{ caseId: string }>();
@@ -746,12 +731,6 @@ async function events(request: Request, env: Env): Promise<Response> {
 			);
 	}
 	if (statements.length) await env.DB.batch(statements);
-	if (body.albumVisit === true)
-		await env.DB.prepare(
-			"INSERT INTO album_visits(day,visits) VALUES(?,1) ON CONFLICT(day) DO UPDATE SET visits=visits+1",
-		)
-			.bind(new Date(now).toISOString().slice(0, 10))
-			.run();
 	return json({ accepted: true });
 }
 
@@ -760,7 +739,7 @@ async function restoreCase(request: Request, env: Env, identity: AccessIdentity,
 	const version = versionValue && /^\d+$/.test(versionValue) ? Number(versionValue) : Number.NaN;
 	if (!Number.isSafeInteger(version) || version < 1) return error("Invalid version.", 400);
 	const row = await env.DB.prepare(
-		"SELECT c.id,c.status,c.photo_id as photoId,p.filename,p.version as photoVersion,p.status as photoStatus FROM removal_cases c JOIN photos p ON p.id=c.photo_id WHERE c.id=? LIMIT 1",
+		"SELECT c.id,c.status,c.photo_id as photoId,p.filename,p.version as photoVersion,p.status as photoStatus FROM removal_requests c JOIN photos p ON p.id=c.photo_id WHERE c.id=? LIMIT 1",
 	)
 		.bind(caseId)
 		.first<{
@@ -773,16 +752,15 @@ async function restoreCase(request: Request, env: Env, identity: AccessIdentity,
 		}>();
 	if (!row) return error("Not found.", 404);
 	const blockers = await env.DB.prepare(
-		"SELECT (SELECT COUNT(*) FROM removal_reports WHERE photo_id=? AND status='pending' AND case_id<>?) as reportCount,(SELECT COUNT(*) FROM removal_cases WHERE photo_id=? AND status='pending' AND id<>?) as caseCount",
+		"SELECT COUNT(*) as requestCount FROM removal_requests WHERE photo_id=? AND status='pending' AND id<>?",
 	)
-		.bind(row.photoId, caseId, row.photoId, caseId)
-		.first<{ reportCount: number; caseCount: number }>();
+		.bind(row.photoId, caseId)
+		.first<{ requestCount: number }>();
 	const canRestore =
 		row.status === "pending" &&
 		row.photoStatus === "quarantined" &&
 		row.photoVersion === version &&
-		Number(blockers?.reportCount ?? 0) === 0 &&
-		Number(blockers?.caseCount ?? 0) === 0;
+		Number(blockers?.requestCount ?? 0) === 0;
 	return json({
 		filename: row.filename,
 		canRestore,
@@ -804,7 +782,7 @@ async function restoreCaseAction(
 	const expectedVersion = typeof body.expectedVersion === "number" ? body.expectedVersion : Number.NaN;
 	if (!Number.isSafeInteger(expectedVersion) || expectedVersion < 1) return error("Invalid version.", 400);
 	const row = await env.DB.prepare(
-		"SELECT c.photo_id as photoId,c.status,p.version as photoVersion,p.status as photoStatus FROM removal_cases c JOIN photos p ON p.id=c.photo_id WHERE c.id=? LIMIT 1",
+		"SELECT c.photo_id as photoId,c.status,p.version as photoVersion,p.status as photoStatus FROM removal_requests c JOIN photos p ON p.id=c.photo_id WHERE c.id=? LIMIT 1",
 	)
 		.bind(caseId)
 		.first<{ photoId: string; status: string; photoVersion: number; photoStatus: string }>();
@@ -812,38 +790,24 @@ async function restoreCaseAction(
 	if (row.status !== "pending" || row.photoStatus !== "quarantined" || row.photoVersion !== expectedVersion)
 		return error("The restoration link is no longer current.", 409);
 	const blockers = await env.DB.prepare(
-		"SELECT (SELECT COUNT(*) FROM removal_reports WHERE photo_id=? AND status='pending' AND case_id<>?) as reportCount,(SELECT COUNT(*) FROM removal_cases WHERE photo_id=? AND status='pending' AND id<>?) as caseCount",
+		"SELECT COUNT(*) as requestCount FROM removal_requests WHERE photo_id=? AND status='pending' AND id<>?",
 	)
-		.bind(row.photoId, caseId, row.photoId, caseId)
-		.first<{ reportCount: number; caseCount: number }>();
-	if (Number(blockers?.reportCount ?? 0) !== 0 || Number(blockers?.caseCount ?? 0) !== 0)
+		.bind(row.photoId, caseId)
+		.first<{ requestCount: number }>();
+	if (Number(blockers?.requestCount ?? 0) !== 0)
 		return error("Another pending removal request must be resolved first.", 409);
 	const operationId = crypto.randomUUID();
 	const now = Date.now();
 	const fixedReason = "Restoration approved from removal notification";
 	const results = await env.DB.batch([
 		env.DB.prepare(
-			"UPDATE photos SET status='published',version=version+1,moderation_operation_id=?,updated_at=? WHERE id=? AND version=? AND status='quarantined' AND EXISTS (SELECT 1 FROM removal_cases WHERE id=? AND status='pending') AND EXISTS (SELECT 1 FROM removal_reports WHERE case_id=? AND status='pending') AND NOT EXISTS (SELECT 1 FROM removal_reports WHERE photo_id=? AND status='pending' AND case_id<>?) AND NOT EXISTS (SELECT 1 FROM removal_cases WHERE photo_id=? AND status='pending' AND id<>?)",
-		).bind(
-			operationId,
-			now,
-			row.photoId,
-			expectedVersion,
-			caseId,
-			caseId,
-			row.photoId,
-			caseId,
-			row.photoId,
-			caseId,
-		),
+			"UPDATE photos SET status='published',version=version+1,moderation_operation_id=?,updated_at=? WHERE id=? AND version=? AND status='quarantined' AND EXISTS (SELECT 1 FROM removal_requests WHERE id=? AND status='pending') AND NOT EXISTS (SELECT 1 FROM removal_requests WHERE photo_id=? AND status='pending' AND id<>?)",
+		).bind(operationId, now, row.photoId, expectedVersion, caseId, row.photoId, caseId),
 		env.DB.prepare(
-			"UPDATE removal_reports SET status='dismissed',resolved_at=? WHERE case_id=? AND status='pending' AND EXISTS (SELECT 1 FROM photos WHERE id=? AND status='published' AND version=? AND moderation_operation_id=?)",
-		).bind(now, caseId, row.photoId, expectedVersion + 1, operationId),
+			"UPDATE removal_requests SET status='dismissed',moderation_operation_id=?,updated_at=?,resolved_at=? WHERE id=? AND status='pending' AND EXISTS (SELECT 1 FROM photos WHERE id=? AND status='published' AND version=? AND moderation_operation_id=?)",
+		).bind(operationId, now, now, caseId, row.photoId, expectedVersion + 1, operationId),
 		env.DB.prepare(
-			"UPDATE removal_cases SET status='dismissed',moderation_operation_id=?,updated_at=? WHERE id=? AND status='pending' AND EXISTS (SELECT 1 FROM photos WHERE id=? AND status='published' AND version=? AND moderation_operation_id=?)",
-		).bind(operationId, now, caseId, row.photoId, expectedVersion + 1, operationId),
-		env.DB.prepare(
-			"INSERT INTO moderation_audit(id,actor_account_id,action,case_id,photo_id,reason,expected_version,created_at) SELECT ?,?,?,?,?,?,?,? WHERE EXISTS (SELECT 1 FROM removal_cases WHERE id=? AND status='dismissed' AND moderation_operation_id=? AND EXISTS (SELECT 1 FROM photos WHERE id=? AND status='published' AND version=? AND moderation_operation_id=?))",
+			"INSERT INTO moderation_audit(id,actor_subject,action,case_id,photo_id,reason,expected_version,created_at) SELECT ?,?,?,?,?,?,?,? WHERE EXISTS (SELECT 1 FROM removal_requests WHERE id=? AND status='dismissed' AND moderation_operation_id=? AND EXISTS (SELECT 1 FROM photos WHERE id=? AND status='published' AND version=? AND moderation_operation_id=?))",
 		).bind(
 			crypto.randomUUID(),
 			identity.sub,
@@ -860,12 +824,7 @@ async function restoreCaseAction(
 			operationId,
 		),
 	]);
-	if (
-		!results[0]?.meta.changes ||
-		!results[1]?.meta.changes ||
-		!results[2]?.meta.changes ||
-		!results[3]?.meta.changes
-	)
+	if (!results[0]?.meta.changes || !results[1]?.meta.changes || !results[2]?.meta.changes)
 		return error("The restoration link is no longer current.", 409);
 	return json({ restored: true, status: "dismissed", version: expectedVersion + 1 });
 }
@@ -907,14 +866,12 @@ async function handle(request: Request, env: Env, ctx: ExecutionContext): Promis
 			const ipWindowAgo = now - 10 * 60 * 1000;
 			const statements: D1PreparedStatement[] = [
 				env.DB.prepare(
-					"INSERT INTO code_challenges(id,account_id,email,email_hash,code_hash,language,created_at,expires_at,resend_after,request_ip_hash) SELECT ?,?,?,?,?,?,?,?,?,? WHERE NOT EXISTS (SELECT 1 FROM code_challenges WHERE email_hash=? AND consumed_at IS NULL AND resend_after>?) AND (SELECT COUNT(*) FROM code_challenges WHERE request_ip_hash=? AND created_at>?) < 10 AND (SELECT COUNT(*) FROM code_challenges WHERE email_hash=? AND created_at>?) < 5",
+					"INSERT INTO code_challenges(id,account_id,email_hash,code_hash,created_at,expires_at,resend_after,request_ip_hash) SELECT ?,?,?,?,?,?,?,? WHERE NOT EXISTS (SELECT 1 FROM code_challenges WHERE email_hash=? AND consumed_at IS NULL AND resend_after>?) AND (SELECT COUNT(*) FROM code_challenges WHERE request_ip_hash=? AND created_at>?) < 10 AND (SELECT COUNT(*) FROM code_challenges WHERE email_hash=? AND created_at>?) < 5",
 				).bind(
 					challengeId,
 					account?.id ?? null,
-					email,
 					emailHash,
 					await hmac(env.OTP_HMAC_SECRET, `${email}:${code}`),
-					language(body.language),
 					now,
 					now + OTP_TTL,
 					now + OTP_RESEND,
@@ -1000,9 +957,7 @@ async function handle(request: Request, env: Env, ctx: ExecutionContext): Promis
 					.run();
 				return error("Invalid code.", 401);
 			}
-			const account = await env.DB.prepare(
-				"SELECT id,email,role,active FROM accounts WHERE id=? AND active=1 LIMIT 1",
-			)
+			const account = await env.DB.prepare("SELECT id,email,active FROM accounts WHERE id=? AND active=1 LIMIT 1")
 				.bind(accepted.account_id)
 				.first<Account>();
 			if (!account) return error("Invalid code.", 401);
@@ -1134,10 +1089,7 @@ export default {
 						cutoff,
 					),
 					env.DB.prepare(
-						"DELETE FROM removal_reports WHERE status!='pending' AND resolved_at IS NOT NULL AND resolved_at<?",
-					).bind(caseCutoff),
-					env.DB.prepare(
-						"DELETE FROM removal_cases WHERE status!='pending' AND updated_at<? AND NOT EXISTS (SELECT 1 FROM removal_reports WHERE case_id=removal_cases.id)",
+						"DELETE FROM removal_requests WHERE status!='pending' AND resolved_at IS NOT NULL AND resolved_at<?",
 					).bind(caseCutoff),
 					env.DB.prepare("DELETE FROM moderation_audit WHERE created_at<?").bind(caseCutoff),
 				]);
