@@ -18,6 +18,8 @@
 		"worker:dev": "npm --prefix services/photo-gallery run dev",
 		"worker:check": "npm --prefix services/photo-gallery run typecheck",
 		"worker:test": "npm --prefix services/photo-gallery test",
+		"prepare": "git config core.hooksPath .githooks || true",
+		"lint:commits": "commitlint --from origin/main --to HEAD --verbose",
 		"test:pipeline": "python3 -m unittest discover -s scripts/photos -p \"test_*.py\"",
 		"verify": "npm run format:check && npm run lint && npm run typecheck && npm run worker:check && npm run worker:test && npm run test:tools && npm run test:pipeline && npm run test:e2e",
 		"deploy:staging": "npm run build && npm --prefix services/photo-gallery run deploy:staging",
@@ -33,6 +35,8 @@
 		"react-dom": "18.2.0"
 	},
 	"devDependencies": {
+		"@commitlint/cli": "21.2.3",
+		"@commitlint/config-conventional": "21.2.3",
 		"@playwright/test": "1.62.1",
 		"@types/node": "25.9.3",
 		"@types/react": "18.0.26",
