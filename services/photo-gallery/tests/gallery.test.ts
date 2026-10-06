@@ -15,6 +15,8 @@ function encoded(value: string | Uint8Array): string {
 }
 
 async function accessFixture(overrides: Record<string, unknown> = {}): Promise<{ token: string; restore: () => void }> {
+	// Access rotates keys under new key IDs; reusing one ID with a new key is not realistic.
+	const kid = `gallery-test-key-${crypto.randomUUID()}`;
 	const pair = await crypto.subtle.generateKey(
 		{ name: "RSASSA-PKCS1-v1_5", modulusLength: 2048, publicExponent: new Uint8Array([1, 0, 1]), hash: "SHA-256" },
 		true,
@@ -22,7 +24,7 @@ async function accessFixture(overrides: Record<string, unknown> = {}): Promise<{
 	);
 	const publicJwk = {
 		...(await crypto.subtle.exportKey("jwk", pair.publicKey)),
-		kid: "gallery-test-key",
+		kid,
 		alg: "RS256",
 		use: "sig",
 	};
@@ -36,7 +38,7 @@ async function accessFixture(overrides: Record<string, unknown> = {}): Promise<{
 		iss: "https://access.test",
 		...overrides,
 	};
-	const signingInput = `${encoded(JSON.stringify({ alg: "RS256", typ: "JWT", kid: "gallery-test-key" }))}.${encoded(JSON.stringify(payload))}`;
+	const signingInput = `${encoded(JSON.stringify({ alg: "RS256", typ: "JWT", kid }))}.${encoded(JSON.stringify(payload))}`;
 	const signature = await crypto.subtle.sign(
 		{ name: "RSASSA-PKCS1-v1_5" },
 		pair.privateKey,

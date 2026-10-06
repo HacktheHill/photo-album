@@ -390,6 +390,9 @@ async function removalNotification(
 	};
 }
 
+// Module-scoped so Access signing keys are reused across requests in an isolate.
+const accessKeySets = new Map<string, ReturnType<typeof createRemoteJWKSet>>();
+
 async function accessIdentity(request: Request, env: Env): Promise<AccessIdentity> {
 	try {
 		const teamSetting = String(env.ACCESS_TEAM);
@@ -398,7 +401,13 @@ async function accessIdentity(request: Request, env: Env): Promise<AccessIdentit
 		const raw = request.headers.get("cf-access-jwt-assertion") ?? parseCookies(request).CF_Authorization;
 		if (!raw) throw new Error("access token");
 		const team = teamSetting.replace(/\/$/, "");
-		const jwks = createRemoteJWKSet(new URL(`${team}/cdn-cgi/access/certs`));
+		let jwks = accessKeySets.get(team);
+		if (!jwks) {
+			// No cooldown: an unknown key ID (after Access rotates keys) refetches at
+			// once instead of failing valid tokens for 30 seconds.
+			jwks = createRemoteJWKSet(new URL(`${team}/cdn-cgi/access/certs`), { cooldownDuration: 0 });
+			accessKeySets.set(team, jwks);
+		}
 		const verified = await jwtVerify(raw, jwks, { issuer: team, audience, algorithms: ["RS256"] });
 		const email = normalizeEmail(verified.payload.email);
 		const sub = typeof verified.payload.sub === "string" ? verified.payload.sub : null;
