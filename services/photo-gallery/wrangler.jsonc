@@ -20,7 +20,7 @@
 	"vars": {
 		"CURRENT_LICENCE_VERSION": "2026-10-06",
 		"SES_REGION": "ca-central-1",
-		"SES_FROM_EMAIL": "info@hackthehill.com",
+		"SES_FROM_EMAIL": "info@ctn-rtc.org",
 		"MODERATOR_EMAILS": "privacy@ctn-rtc.org",
 		"APP_ORIGIN": "",
 		"ACCESS_TEAM": "",
@@ -54,7 +54,7 @@
 			"vars": {
 				"CURRENT_LICENCE_VERSION": "2026-10-06",
 				"SES_REGION": "ca-central-1",
-				"SES_FROM_EMAIL": "info@hackthehill.com",
+				"SES_FROM_EMAIL": "info@ctn-rtc.org",
 				"MODERATOR_EMAILS": "privacy@ctn-rtc.org",
 				"APP_ORIGIN": "https://photos.hackthehill.com",
 				"ACCESS_TEAM": "",
