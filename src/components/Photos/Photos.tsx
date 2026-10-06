@@ -310,10 +310,7 @@ function Shell({
 		<div className={styles.app}>
 			<header className={styles.topbar}>
 				<a href="/" className={styles.brand} aria-label="Hack the Hill III">
-					<img src="/Logos/hackthehill-logo.svg" alt="" />
-					<span>
-						HACK THE HILL <small>III</small>
-					</span>
+					<img src="/Logos/hackthehill-banner.svg" alt="" />
 				</a>
 				<div className={styles.topActions}>
 					<button
@@ -326,9 +323,7 @@ function Shell({
 				</div>
 			</header>
 			{children}
-			<footer className={styles.footer}>
-				Hack the Hill III · <a href="mailto:privacy@ctn-rtc.org">privacy@ctn-rtc.org</a>
-			</footer>
+			<footer className={styles.footer}>Hack the Hill III</footer>
 		</div>
 	);
 }
@@ -401,9 +396,8 @@ function Auth({
 		<Shell language={language} setLanguage={setLanguage}>
 			<main className={styles.authPage}>
 				<section className={styles.authCard} aria-labelledby="auth-title">
-					<div className={styles.eyebrow}>HACK THE HILL III · 2026</div>
 					<h1 id="auth-title">{t.album}</h1>
-					<p className={styles.access}>{t.access}</p>
+
 					{sent ? (
 						<form onSubmit={verify}>
 							<label htmlFor="photo-code">{t.code}</label>
@@ -454,9 +448,9 @@ function Auth({
 							</button>
 						</form>
 					)}
-					<p className={styles.privacy}>{t.privacy}</p>
+
 					<p className={styles.support}>
-						<a href="mailto:privacy@ctn-rtc.org">{t.support}</a>
+						<a href="mailto:info@ctn-rtc.org">{t.support}</a>
 					</p>
 					{notice && <NoticeBox notice={notice} />}
 				</section>
@@ -562,7 +556,6 @@ function Album({
 			<main className={styles.album}>
 				<section className={styles.albumHero}>
 					<div>
-						<div className={styles.eyebrow}>HACK THE HILL III · 2026</div>
 						<h1>{t.cover}</h1>
 						<button className={styles.textButton} onClick={onSignOut}>
 							{t.signout}

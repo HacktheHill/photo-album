@@ -26,12 +26,9 @@
 }
 
 .brand img {
-	width: 42px;
-	height: 42px;
-	padding: 4px;
-	border-radius: var(--radius-control);
-	background: #fff;
-	object-fit: contain;
+	width: min(240px, 50vw);
+	height: auto;
+	display: block;
 }
 
 .language {
@@ -74,7 +71,6 @@
 	font-size: 0.72rem;
 	font-weight: 800;
 	letter-spacing: 0.16em;
-	text-transform: uppercase;
 }
 
 h1 {
@@ -165,10 +161,6 @@ button:disabled {
 @media (max-width: 430px) {
 	.topbar {
 		min-height: 62px;
-	}
-
-	.brand span {
-		display: none;
 	}
 
 	.page {

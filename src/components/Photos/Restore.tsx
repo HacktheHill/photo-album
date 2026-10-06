@@ -195,8 +195,7 @@ export default function Restore({ caseId, version }: { caseId: string; version: 
 		<div className={styles.app}>
 			<header className={styles.topbar}>
 				<a className={styles.brand} href="/" aria-label={t.brand}>
-					<img src="/Logos/hackthehill-logo.svg" alt="" />
-					<span>{t.brand}</span>
+					<img src="/Logos/hackthehill-banner.svg" alt="" />
 				</a>
 				<button
 					className={styles.language}
@@ -209,7 +208,6 @@ export default function Restore({ caseId, version }: { caseId: string; version: 
 			</header>
 			<main className={styles.page}>
 				<section className={styles.card} aria-live="polite">
-					<p className={styles.eyebrow}>{t.title}</p>
 					<h1 tabIndex={-1} ref={headingRef}>
 						{loading ? t.loading : heading}
 					</h1>
