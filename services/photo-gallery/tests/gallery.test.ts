@@ -156,6 +156,56 @@ async function reset(): Promise<void> {
 describe("photo gallery in the Workers runtime", () => {
 	beforeEach(reset);
 
+	it("allows CTN inboxes without a prior import, including previously inactive CTN accounts", async () => {
+		for (const address of ["new-member@ctn-rtc.org", "revoked-member@ctn-rtc.org"]) {
+			if (address.startsWith("revoked")) {
+				await env.DB.prepare(
+					"INSERT INTO accounts(id,email,email_hash,active,created_at,revoked_at) VALUES('revoked-ctn',?,?,0,1,2)",
+				)
+					.bind(address, await hmac(address))
+					.run();
+			}
+			const response = await SELF.fetch("https://gallery.test/?action=request-code", {
+				method: "POST",
+				headers: { origin: "https://gallery.test", "content-type": "application/json" },
+				body: JSON.stringify({ email: address.toUpperCase(), language: "en" }),
+			});
+			expect(response.status).toBe(202);
+			const account = await env.DB.prepare("SELECT active,revoked_at FROM accounts WHERE email=?")
+				.bind(address)
+				.first();
+			expect(account).toMatchObject({ active: 1, revoked_at: null });
+			const outbox = await env.DB.prepare(
+				"SELECT payload_json FROM notification_outbox WHERE kind='otp' AND json_extract(payload_json,'$.to')=?",
+			)
+				.bind(address)
+				.first<{ payload_json: string }>();
+			expect(outbox).not.toBeNull();
+			const code = JSON.parse(outbox!.payload_json).text.match(/\b[0-9]{8}\b/)[0];
+			const verified = await SELF.fetch("https://gallery.test/?action=verify-code", {
+				method: "POST",
+				headers: { origin: "https://gallery.test", "content-type": "application/json" },
+				body: JSON.stringify({ email: address, code }),
+			});
+			expect(verified.status).toBe(200);
+		}
+	});
+
+	it("does not grant domain access to lookalike domains or unrelated unapproved addresses", async () => {
+		for (const address of ["person@ctn-rtc.org.example.com", "person@fake-ctn-rtc.org", "person@example.com"]) {
+			await SELF.fetch("https://gallery.test/?action=request-code", {
+				method: "POST",
+				headers: { origin: "https://gallery.test", "content-type": "application/json" },
+				body: JSON.stringify({ email: address }),
+			});
+			expect(await env.DB.prepare("SELECT id FROM accounts WHERE email=?").bind(address).first()).toBeNull();
+		}
+		const outbox = await env.DB.prepare(
+			"SELECT COUNT(*) as count FROM notification_outbox WHERE kind='otp'",
+		).first<{ count: number }>();
+		expect(outbox?.count).toBe(0);
+	});
+
 	it("rejects Access assertions with the wrong audience, domain, or expiry", async () => {
 		for (const overrides of [
 			{ aud: "other-audience" },
