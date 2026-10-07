@@ -876,7 +876,7 @@ function Viewer({
 	const position = photos.findIndex(item => item.id === photo.id);
 	const current = photo;
 	const dialog = useModalFocus(onClose);
-	const touchStart = useRef<number | null>(null);
+	const touchStart = useRef<{ x: number; y: number; id: number } | null>(null);
 	const queue = useRef<Set<string>>(new Set());
 	const navigate = useCallback(
 		(delta: number) => {
@@ -914,13 +914,22 @@ function Viewer({
 		};
 	}, [navigate, current.id, session, dialog]);
 	const handleTouchStart = (event: TouchEvent) => {
-		touchStart.current = event.changedTouches[0]?.clientX ?? null;
+		const touch = event.touches[0];
+		touchStart.current =
+			event.touches.length === 1 && touch && !(event.target instanceof Element && event.target.closest("button"))
+				? { x: touch.clientX, y: touch.clientY, id: touch.identifier }
+				: null;
 	};
 	const handleTouchEnd = (event: TouchEvent) => {
-		if (touchStart.current === null) return;
-		const difference = (event.changedTouches[0]?.clientX ?? 0) - touchStart.current;
-		if (Math.abs(difference) > 50) navigate(difference > 0 ? -1 : 1);
+		const start = touchStart.current;
 		touchStart.current = null;
+		if (!start || event.touches.length) return;
+		const touch = Array.from(event.changedTouches).find(item => item.identifier === start.id);
+		if (!touch) return;
+		const horizontal = touch.clientX - start.x;
+		const vertical = touch.clientY - start.y;
+		if (Math.abs(horizontal) > 50 && Math.abs(horizontal) > Math.abs(vertical) * 1.5)
+			navigate(horizontal > 0 ? -1 : 1);
 	};
 	return (
 		<div className={styles.modalBackdrop} role="presentation">
@@ -931,8 +940,6 @@ function Viewer({
 				aria-labelledby="viewer-title"
 				tabIndex={-1}
 				ref={dialog}
-				onTouchStart={handleTouchStart}
-				onTouchEnd={handleTouchEnd}
 			>
 				<div className={styles.viewerTop}>
 					<h2 id="viewer-title" className={styles.viewerCategory}>
@@ -942,7 +949,14 @@ function Viewer({
 						×
 					</button>
 				</div>
-				<div className={styles.viewerImageWrap}>
+				<div
+					className={styles.viewerImageWrap}
+					onTouchStart={handleTouchStart}
+					onTouchEnd={handleTouchEnd}
+					onTouchCancel={() => {
+						touchStart.current = null;
+					}}
+				>
 					<button
 						className={`${styles.viewerArrow} ${styles.viewerPrev}`}
 						onClick={() => navigate(-1)}

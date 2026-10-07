@@ -616,3 +616,74 @@ test("keyboard focus rings remain visible around desktop filters and photos", as
 	await expect(page.getByRole("button", { name: "View photo: Opening ceremony 1", exact: true })).toBeFocused();
 	expect(await outlineIsVisible()).toBe(true);
 });
+
+test("mobile landscape previews fit closely without cropping", async ({ page }) => {
+	await page.setViewportSize({ width: 390, height: 844 });
+	await routeAttendee(page);
+	await page.route("**/?action=preview&photo=opening-001", route =>
+		route.fulfill({
+			contentType: "image/svg+xml",
+			body: '<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="400"><rect width="1600" height="400" fill="red"/></svg>',
+		}),
+	);
+	await page.goto("/");
+	await page.getByRole("button", { name: "View photo: Opening ceremony 1", exact: true }).click();
+	const area = page.locator('[class*="viewerImageWrap"]');
+	await expect(area.locator("img")).toBeVisible();
+	await expect(page.getByRole("status")).toHaveCount(0);
+	const bounds = await area.boundingBox();
+	expect(bounds!.height).toBeLessThanOrEqual(160);
+	const img = await area.locator("img").boundingBox();
+	expect(img!.width / img!.height).toBeCloseTo(4, 1);
+	await expect(page.getByRole("button", { name: "Download", exact: true })).toBeInViewport();
+});
+
+test("viewer swipes ignore vertical, diagonal, cancelled and multi-touch gestures", async ({ page }) => {
+	await page.setViewportSize({ width: 390, height: 844 });
+	await routeAttendee(page);
+	await page.goto("/");
+	await page.getByRole("button", { name: "View photo: Opening ceremony 1", exact: true }).click();
+	const area = page.locator('[class*="viewerImageWrap"]');
+	const point = (x: number, y: number, identifier = 1) => ({ clientX: x, clientY: y, identifier });
+	// Firefox desktop has no Touch constructor; plain bubbling events exercise the same React handlers.
+	const touchEvent = async (target: typeof area, type: string, data = {}) => {
+		await target.evaluate(
+			(element, { type, data }) => {
+				const event = new Event(type, { bubbles: true });
+				Object.assign(event, data);
+				element.dispatchEvent(event);
+			},
+			{ type, data },
+		);
+	};
+	const swipe = async (x: number, y: number) => {
+		await touchEvent(area, "touchstart", { touches: [point(250, 250)], changedTouches: [point(250, 250)] });
+		await touchEvent(area, "touchend", { touches: [], changedTouches: [point(x, y)] });
+	};
+	for (const [x, y] of [
+		[180, 450],
+		[150, 350],
+		[240, 250],
+	]) {
+		await swipe(x, y);
+		await expect(page.locator("#viewer-title")).toHaveText("Opening ceremony");
+	}
+	await touchEvent(area, "touchstart", { touches: [point(250, 250)], changedTouches: [point(250, 250)] });
+	await touchEvent(area, "touchcancel");
+	await touchEvent(area, "touchend", { touches: [], changedTouches: [point(100, 250)] });
+	await expect(page.locator("#viewer-title")).toHaveText("Opening ceremony");
+	await touchEvent(area, "touchstart", {
+		touches: [point(250, 250), point(200, 250, 2)],
+		changedTouches: [point(250, 250)],
+	});
+	await touchEvent(area, "touchend", { touches: [], changedTouches: [point(100, 250)] });
+	await expect(page.locator("#viewer-title")).toHaveText("Opening ceremony");
+	const info = page.locator('[class*="viewerInfo"]');
+	await touchEvent(info, "touchstart", { touches: [point(250, 250)], changedTouches: [point(250, 250)] });
+	await touchEvent(info, "touchend", { touches: [], changedTouches: [point(100, 250)] });
+	await expect(page.locator("#viewer-title")).toHaveText("Opening ceremony");
+	await swipe(100, 260);
+	await expect(page.locator("#viewer-title")).toHaveText("Closing ceremony");
+	await swipe(350, 250);
+	await expect(page.locator("#viewer-title")).toHaveText("Opening ceremony");
+});

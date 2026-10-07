@@ -407,6 +407,7 @@ button:disabled {
 	line-height: 1;
 }
 .viewerImageWrap {
+	touch-action: pan-y pinch-zoom;
 	position: relative;
 	display: grid;
 	place-items: center;
@@ -573,9 +574,6 @@ button:disabled {
 	}
 	.viewer {
 		padding: 0.8rem;
-	}
-	.viewerImageWrap {
-		min-height: 46vh;
 	}
 	.viewerArrow {
 		width: 2.3rem;
@@ -766,6 +764,18 @@ button:disabled {
 	}
 }
 @media (max-width: 760px) {
+	.viewerImageWrap {
+		min-height: 8rem;
+	}
+	.viewerImageWrap:has(.previewStatus) {
+		min-height: 12rem;
+	}
+	.previewStatus {
+		padding: 1rem;
+	}
+	.previewStatus p {
+		margin: 0;
+	}
 	.categoryNav,
 	.filterLabel {
 		display: none;
