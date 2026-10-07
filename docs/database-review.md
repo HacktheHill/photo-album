@@ -1,6 +1,6 @@
 # Database review
 
-Reviewed on 2026-10-06. Migration `0006_simplify_schema.sql` implements the cleanup below. Its production cutover is scheduled for 11 p.m. Toronto time on 6 October; it has not yet been applied remotely.
+Reviewed on 2026-10-06. Migration `0006_simplify_schema.sql` implements the cleanup below. Applied to production on 6 October 2026 at 10:19 p.m. Toronto time, after the user moved the maintenance window forward.
 
 The migration reduces the application schema from 14 tables and 106 columns to 12 tables and 87 columns. Existing eligibility, sessions, photo variants, download records, aggregate totals, notifications, and moderation history are preserved.
 
@@ -34,7 +34,7 @@ Cloudflare's `_cf_KV` and `d1_migrations` bookkeeping is unchanged. Foreign keys
 
 ## Validation and remaining decisions
 
-A rehearsal against a private production export preserved the retained rows byte-for-byte, including 530 active accounts, 358 photos, and 1,432 variants, with no foreign-key violations. Tests cover migration preservation, unsafe-merge rejection, login, removal retries/quotas, restoration races, and retention.
+Fresh production backups taken during the cutover verified all 12 retained-data groups before and after migration, including 539 active accounts, 358 published photos, and 1,432 variants, with no foreign-key violations. Tests cover migration preservation, unsafe-merge rejection, login, removal retries/quotas, restoration races, and retention.
 
 Per-photo counts still display the last 90 days. Changing that window or its label is a separate UI decision. View-deduplication keys remain temporary session-derived pseudonyms; making them photo-specific is a separate privacy improvement, not part of this schema migration. Eligibility source manifests stay private rather than copying registration profiles into D1.
 

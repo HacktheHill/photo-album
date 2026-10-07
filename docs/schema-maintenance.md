@@ -1,6 +1,8 @@
 # Schema maintenance
 
-The one-time production cutover is scheduled for **6 October 2026 at 11 p.m. America/Toronto**. No migration or Worker activation should run before then. The schema cleanup is in `0006_simplify_schema.sql`.
+The one-time production cutover completed on **6 October 2026 at 10:19 p.m. America/Toronto**, after the user authorised starting earlier. Album operations were paused for **105 seconds**. Migration `0006_simplify_schema.sql` is applied, the compatible Worker is active, and the former 11 p.m. automation was deleted.
+
+Fresh private backups verified every retained-data group before and after migration. All 539 active accounts, 358 published photos, and 1,432 variants were preserved, with no foreign-key violations. Live checks confirmed attendee access, public highlights, and restoration protection. The procedure below records the completed cutover and recovery approach; it is not a pending task.
 
 Production targets:
 
