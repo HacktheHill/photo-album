@@ -171,10 +171,10 @@ describe("photo gallery in the Workers runtime", () => {
 				body: JSON.stringify({ email: address.toUpperCase(), language: "en" }),
 			});
 			expect(response.status).toBe(202);
-			const account = await env.DB.prepare("SELECT active,revoked_at FROM accounts WHERE email=?")
-				.bind(address)
-				.first();
-			expect(account).toMatchObject({ active: 1, revoked_at: null });
+			const accountState = () =>
+				env.DB.prepare("SELECT active,revoked_at FROM accounts WHERE email=?").bind(address).first();
+			// Requesting a code proves nothing, so it must not create or reactivate an account.
+			expect(await accountState()).toEqual(address.startsWith("revoked") ? { active: 0, revoked_at: 2 } : null);
 			const outbox = await env.DB.prepare(
 				"SELECT payload_json FROM notification_outbox WHERE kind='otp' AND json_extract(payload_json,'$.to')=?",
 			)
@@ -188,7 +188,24 @@ describe("photo gallery in the Workers runtime", () => {
 				body: JSON.stringify({ email: address, code }),
 			});
 			expect(verified.status).toBe(200);
+			expect(await accountState()).toMatchObject({ active: 1, revoked_at: null });
 		}
+	});
+
+	it("creates no CTN account until a correct code is verified", async () => {
+		const address = "unverified@ctn-rtc.org";
+		await SELF.fetch("https://gallery.test/?action=request-code", {
+			method: "POST",
+			headers: { origin: "https://gallery.test", "content-type": "application/json" },
+			body: JSON.stringify({ email: address }),
+		});
+		const wrong = await SELF.fetch("https://gallery.test/?action=verify-code", {
+			method: "POST",
+			headers: { origin: "https://gallery.test", "content-type": "application/json" },
+			body: JSON.stringify({ email: address, code: "00000000" }),
+		});
+		expect(wrong.status).toBe(401);
+		expect(await env.DB.prepare("SELECT id FROM accounts WHERE email=?").bind(address).first()).toBeNull();
 	});
 
 	it("does not grant domain access to lookalike domains or unrelated unapproved addresses", async () => {

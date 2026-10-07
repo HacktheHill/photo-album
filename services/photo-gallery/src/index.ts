@@ -209,15 +209,25 @@ function escapeHtml(value: string): string {
 		.replaceAll("'", "&#39;");
 }
 
+// Every exact @ctn-rtc.org inbox may sign in without a prior import.
+function ctnAddress(email: string): boolean {
+	return email.endsWith("@ctn-rtc.org");
+}
+
 async function accountForEmail(env: Env, email: string): Promise<Account | null> {
-	const emailHash = await hmac(env.OTP_HMAC_SECRET, email);
-	if (email.endsWith("@ctn-rtc.org")) {
-		await env.DB.prepare(
-			"INSERT INTO accounts(id,email,email_hash,active,created_at,revoked_at) VALUES(?,?,?,1,?,NULL) ON CONFLICT(email_hash) DO UPDATE SET active=1,revoked_at=NULL",
-		)
-			.bind(crypto.randomUUID(), email, emailHash, Date.now())
-			.run();
-	}
+	return env.DB.prepare("SELECT id,email,active FROM accounts WHERE email_hash=? AND active=1 LIMIT 1")
+		.bind(await hmac(env.OTP_HMAC_SECRET, email))
+		.first<Account>();
+}
+
+// Called only after a CTN inbox has proved ownership with a valid code, so
+// requesting a code alone never creates or reactivates an account.
+async function activateCtnAccount(env: Env, email: string, emailHash: string): Promise<Account | null> {
+	await env.DB.prepare(
+		"INSERT INTO accounts(id,email,email_hash,active,created_at,revoked_at) VALUES(?,?,?,1,?,NULL) ON CONFLICT(email_hash) DO UPDATE SET active=1,revoked_at=NULL",
+	)
+		.bind(crypto.randomUUID(), email, emailHash, Date.now())
+		.run();
 	return env.DB.prepare("SELECT id,email,active FROM accounts WHERE email_hash=? AND active=1 LIMIT 1")
 		.bind(emailHash)
 		.first<Account>();
@@ -892,7 +902,7 @@ async function handle(request: Request, env: Env, ctx: ExecutionContext): Promis
 					"UPDATE code_challenges SET consumed_at=? WHERE email_hash=? AND consumed_at IS NULL AND id<>? AND EXISTS (SELECT 1 FROM code_challenges WHERE id=? AND consumed_at IS NULL)",
 				).bind(now, emailHash, challengeId, challengeId),
 			];
-			if (account) {
+			if (account || ctnAddress(email)) {
 				const french = language(body.language) === "fr";
 				const payload = french
 					? {
@@ -913,7 +923,7 @@ async function handle(request: Request, env: Env, ctx: ExecutionContext): Promis
 			}
 			const results = await env.DB.batch(statements);
 			if (!results[0]?.meta.changes) return error("Please wait before requesting another code.", 429);
-			if (account) ctx.waitUntil(processOutbox(env));
+			if (account || ctnAddress(email)) ctx.waitUntil(processOutbox(env));
 			return json({ accepted: true }, 202);
 		} catch (caught) {
 			if (caught instanceof BadRequestError) return error("Invalid request.", 400);
@@ -962,9 +972,12 @@ async function handle(request: Request, env: Env, ctx: ExecutionContext): Promis
 					.run();
 				return error("Invalid code.", 401);
 			}
-			const account = await env.DB.prepare("SELECT id,email,active FROM accounts WHERE id=? AND active=1 LIMIT 1")
-				.bind(accepted.account_id)
-				.first<Account>();
+			let account = accepted.account_id
+				? await env.DB.prepare("SELECT id,email,active FROM accounts WHERE id=? AND active=1 LIMIT 1")
+						.bind(accepted.account_id)
+						.first<Account>()
+				: null;
+			if (!account && ctnAddress(email)) account = await activateCtnAccount(env, email, emailHash);
 			if (!account) return error("Invalid code.", 401);
 			const rawToken = randomToken();
 			const expiresAt = Date.now() + ATTENDEE_SESSION_TTL;
