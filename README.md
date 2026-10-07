@@ -48,7 +48,7 @@ Commits follow [Conventional Commits](https://www.conventionalcommits.org/), for
 | `scripts/photos/`         | Photo variants, upload, inventory and verification tools            |
 | `tests/e2e/`              | Playwright browser tests with synthetic fixtures                    |
 | `public/`                 | Logo, favicons, fonts, `robots.txt` and static security headers     |
-| `docs/`                   | Operations, request contract, database review and schema runbook    |
+| `docs/`                   | Operations, request contract and database review                    |
 
 The app uses Astro and React, Cloudflare Workers with private R2 and D1, and AWS SES for email. Pages and application requests use `/` and `/restore`; an `action` query parameter selects each operation. Assets and browser requests use root-relative paths on the same origin, such as `/fonts/…` and `/?action=album`.
 
@@ -63,7 +63,7 @@ Source photos, private manifests, eligibility exports, backups and credentials s
 - [Worker development](services/photo-gallery/README.md): package commands and dependency notes.
 - [Photo pipeline](scripts/photos/README.md): derivatives, upload and complete object verification.
 
-[Database review](docs/database-review.md) covers column purpose and the schema cleanup in migration `0006`; the [schema maintenance runbook](docs/schema-maintenance.md) covers its one-time production cutover.
+[Database review](docs/database-review.md) covers column purpose and the schema cleanup applied in migration `0006`.
 
 ## Licence
 

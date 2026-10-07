@@ -38,4 +38,4 @@ Fresh production backups taken during the cutover verified all 12 retained-data 
 
 Per-photo counts still display the last 90 days. Changing that window or its label is a separate UI decision. View-deduplication keys remain temporary session-derived pseudonyms; making them photo-specific is a separate privacy improvement, not part of this schema migration. Eligibility source manifests stay private rather than copying registration profiles into D1.
 
-See [schema maintenance](schema-maintenance.md) for the cutover and recovery procedure. Do not rewrite already-applied migrations or roll back Worker code independently of the database schema.
+Do not rewrite already-applied migrations or roll back Worker code independently of the database schema.
