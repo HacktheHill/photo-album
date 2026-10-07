@@ -101,7 +101,7 @@ test("email code request supports paste and verifies through the API contract", 
 			},
 		});
 	});
-	const eventBodies: Array<{ photoIds: string[]; albumVisit: boolean }> = [];
+	const eventBodies: Array<{ photoIds: string[] }> = [];
 	await page.route("**/?action=events", async route => {
 		eventBodies.push(await route.request().postDataJSON());
 		await route.fulfill({ json: {} });
@@ -115,8 +115,7 @@ test("email code request supports paste and verifies through the API contract", 
 	await page.locator("#photo-code").fill("12345678");
 	await page.getByRole("button", { name: "Log in" }).click();
 	await expect(page.getByRole("heading", { name: "Photo album" })).toBeVisible();
-	await expect.poll(() => eventBodies.filter(event => event.albumVisit).length).toBe(1);
-	expect(eventBodies.find(event => event.albumVisit)).toEqual({ photoIds: [], albumVisit: true });
+	expect(eventBodies).toHaveLength(0);
 	await expect
 		.poll(() =>
 			page
@@ -132,7 +131,7 @@ test("email code request supports paste and verifies through the API contract", 
 	await page.getByRole("button", { name: "Français" }).click();
 	await expect(page.getByRole("heading", { name: "Album photo" })).toBeVisible();
 	await expect(page.getByRole("searchbox")).toHaveCount(0);
-	expect(eventBodies.filter(event => event.albumVisit)).toHaveLength(1);
+	expect(eventBodies).toHaveLength(0);
 });
 
 test("download shows complete terms in the selected language and cancellation makes no download request", async ({
@@ -495,4 +494,62 @@ test("sign-in errors use the selected language", async ({ page }) => {
 	await page.locator("#photo-email").fill("attendee@example.org");
 	await page.getByRole("button", { name: "Se connecter" }).click();
 	await expect(page.getByRole("alert")).toHaveText("Veuillez patienter avant de demander un autre code.");
+});
+
+test("mobile filters show all choices, apply immediately and restore focus", async ({ page }) => {
+	await page.setViewportSize({ width: 390, height: 844 });
+	await routeAttendee(page);
+	await page.goto("/");
+	const trigger = page.getByRole("button", { name: "Filter: All photos · 2" });
+	await trigger.click();
+	const sheet = page.getByRole("dialog", { name: "Filter photos" });
+	await expect(sheet).toBeVisible();
+	await expectTopDialogContainsFocus(page);
+	await expect(page.locator("main")).toHaveAttribute("inert", "");
+	await sheet.getByRole("button", { name: "Opening ceremony 1", exact: true }).click();
+	await expect(sheet).toHaveCount(0);
+	const selected = page.getByRole("button", { name: "Filter: Opening ceremony · 1" });
+	await expect(selected).toBeFocused();
+	await expect(page.locator("main li")).toHaveCount(1);
+	await selected.click();
+	await expect(sheet.getByRole("button", { name: /Opening ceremony 1/ })).toHaveAttribute("aria-pressed", "true");
+	await page.keyboard.press("Escape");
+	await expect(selected).toBeFocused();
+	await expect(page.locator("main")).not.toHaveAttribute("inert", "");
+	await selected.click();
+	await page.locator('[class*="sheetBackdrop"]').click({ position: { x: 4, y: 4 } });
+	await expect(sheet).toHaveCount(0);
+	await page.getByRole("button", { name: "Français", exact: true }).click();
+	await page.getByRole("button", { name: "Filtrer: Cérémonie d’ouverture · 1" }).click();
+	await expect(page.getByRole("dialog", { name: "Filtrer les photos" })).toBeVisible();
+});
+
+test("photo cards show only nonzero activity and favourite buttons remain independent", async ({ page }) => {
+	await routeAttendee(page);
+	await page.route("**/?action=album", route =>
+		route.fulfill({
+			json: {
+				version: "1",
+				photos: [
+					{ ...photo, activity: { views: 10, downloadRequests: 2 } },
+					{
+						...photo,
+						id: "closing-001",
+						category: "Closing Ceremony",
+						activity: { views: 0, downloadRequests: 0 },
+					},
+				],
+			},
+		}),
+	);
+	await page.goto("/");
+	await expect(page.locator("article").first()).toContainText("10 views · 2 downloads");
+	await expect(page.locator("article strong")).toHaveCount(0);
+	await expect(page.locator('[class*="cardMeta"]')).toHaveCount(1);
+	await page.getByRole("button", { name: "Add to favourites", exact: true }).first().click();
+	await expect(page.getByRole("dialog")).toHaveCount(0);
+	await expect(page.getByRole("button", { name: "Remove from favourites", exact: true })).toHaveAttribute(
+		"aria-pressed",
+		"true",
+	);
 });
