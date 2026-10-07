@@ -394,6 +394,9 @@ button:disabled {
 }
 .favourite,
 .favouriteLarge {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
 	min-width: var(--control-height);
 	min-height: var(--control-height);
 	flex: none;

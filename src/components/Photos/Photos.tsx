@@ -389,6 +389,25 @@ function Shell({
 	);
 }
 
+function HeartIcon({ filled }: { filled: boolean }) {
+	return (
+		<svg
+			width="24"
+			height="24"
+			viewBox="0 0 24 24"
+			fill={filled ? "currentColor" : "none"}
+			stroke="currentColor"
+			strokeWidth="1.8"
+			strokeLinecap="round"
+			strokeLinejoin="round"
+			aria-hidden="true"
+			focusable="false"
+		>
+			<path d="M12 20.5 3.7 12.2C1.2 9.7 1.2 5.7 3.7 3.7c2.5-2 6-1.2 8.3 1.8 2.3-3 5.8-3.8 8.3-1.8 2.5 2 2.5 6 0 8.5Z" />
+		</svg>
+	);
+}
+
 function Spinner() {
 	return <span className={styles.spinner} aria-hidden="true" />;
 }
@@ -695,7 +714,7 @@ function Album({
 										aria-label={favourites.has(photo.id) ? t.removeFavourite : t.addFavourite}
 										aria-pressed={favourites.has(photo.id)}
 									>
-										{favourites.has(photo.id) ? "♥" : "♡"}
+										<HeartIcon filled={favourites.has(photo.id)} />
 									</button>
 									{Boolean(photo.activity?.views || photo.activity?.downloadRequests) && (
 										<div className={styles.cardMeta}>
@@ -988,7 +1007,7 @@ function Viewer({
 						aria-label={favourites.has(current.id) ? t.removeFavourite : t.addFavourite}
 						aria-pressed={favourites.has(current.id)}
 					>
-						{favourites.has(current.id) ? "♥" : "♡"}
+						<HeartIcon filled={favourites.has(current.id)} />
 					</button>
 				</div>
 			</div>
