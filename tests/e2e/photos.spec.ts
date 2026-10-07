@@ -687,3 +687,46 @@ test("viewer swipes ignore vertical, diagonal, cancelled and multi-touch gesture
 	await swipe(350, 250);
 	await expect(page.locator("#viewer-title")).toHaveText("Opening ceremony");
 });
+
+test("viewer backdrop dismisses only gestures that start and end outside", async ({ page }) => {
+	await routeAttendee(page);
+	await page.goto("/");
+	const opener = page.getByRole("button", { name: "View photo: Opening ceremony 1", exact: true });
+	await opener.click();
+	const viewer = page.getByRole("dialog");
+	const bounds = await viewer.boundingBox();
+	if (!bounds) throw new Error("Viewer has no bounds");
+	const inside = { x: bounds.x + 100, y: bounds.y + 20 };
+	await page.mouse.move(inside.x, inside.y);
+	await page.mouse.down();
+	await page.mouse.move(5, 5);
+	await page.mouse.up();
+	await expect(viewer).toBeVisible();
+	await page.mouse.down();
+	await page.mouse.move(inside.x, inside.y);
+	await page.mouse.up();
+	await expect(viewer).toBeVisible();
+	await page.mouse.click(5, 5);
+	await expect(viewer).toHaveCount(0);
+	await expect(opener).toBeFocused();
+	await expect(page).toHaveURL(/\/$/);
+});
+
+test("mobile viewer controls remain easy to tap and respect reduced motion", async ({ page }) => {
+	await page.setViewportSize({ width: 390, height: 844 });
+	await page.emulateMedia({ reducedMotion: "reduce" });
+	await routeAttendee(page);
+	await page.goto("/");
+	await expect(page.locator('img[src="/Logos/hackthehill-banner.svg"]')).toHaveAttribute("width", "635");
+	await expect(page.locator('img[src="/Logos/hackthehill-banner.svg"]')).toHaveAttribute("height", "96");
+	await page.getByRole("button", { name: "View photo: Opening ceremony 1", exact: true }).click();
+	const viewer = page.getByRole("dialog");
+	await expect(viewer).toHaveCSS("animation-name", "none");
+	for (const name of ["Previous photo", "Next photo"]) {
+		const bounds = await viewer.getByRole("button", { name, exact: true }).boundingBox();
+		expect(bounds?.width).toBeGreaterThanOrEqual(44);
+		expect(bounds?.height).toBeGreaterThanOrEqual(44);
+	}
+	await viewer.getByRole("button", { name: "Next photo", exact: true }).click();
+	await expect(page.locator("#viewer-title")).toHaveText("Closing ceremony");
+});

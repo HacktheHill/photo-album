@@ -366,7 +366,7 @@ function Shell({
 		<div className={styles.app}>
 			<header className={styles.topbar}>
 				<a href="/" className={styles.brand} aria-label="Hack the Hill III">
-					<img src="/Logos/hackthehill-banner.svg" alt="" />
+					<img src="/Logos/hackthehill-banner.svg" alt="" width={635} height={96} />
 				</a>
 				{onSignOut && <h1 className={styles.albumTitle}>{t.cover}</h1>}
 				<div className={styles.topActions}>
@@ -877,6 +877,7 @@ function Viewer({
 	const current = photo;
 	const dialog = useModalFocus(onClose);
 	const touchStart = useRef<{ x: number; y: number; id: number } | null>(null);
+	const backdropPointer = useRef<number | null>(null);
 	const queue = useRef<Set<string>>(new Set());
 	const navigate = useCallback(
 		(delta: number) => {
@@ -932,7 +933,35 @@ function Viewer({
 			navigate(horizontal > 0 ? -1 : 1);
 	};
 	return (
-		<div className={styles.modalBackdrop} role="presentation">
+		<div
+			className={styles.modalBackdrop}
+			role="presentation"
+			onPointerDown={event => {
+				backdropPointer.current =
+					event.target === event.currentTarget && event.isPrimary && event.button === 0
+						? event.pointerId
+						: null;
+			}}
+			onPointerUp={event => {
+				const startedOutside = backdropPointer.current === event.pointerId;
+				backdropPointer.current = null;
+				if (!startedOutside || event.target !== event.currentTarget) return;
+				// Touch may capture the pointer: check its final position as well as its target.
+				const bounds = dialog.current?.getBoundingClientRect();
+				if (
+					bounds &&
+					event.clientX >= bounds.left &&
+					event.clientX <= bounds.right &&
+					event.clientY >= bounds.top &&
+					event.clientY <= bounds.bottom
+				)
+					return;
+				onClose();
+			}}
+			onPointerCancel={() => {
+				backdropPointer.current = null;
+			}}
+		>
 			<div
 				className={styles.viewer}
 				role="dialog"
