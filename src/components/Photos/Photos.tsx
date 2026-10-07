@@ -117,6 +117,20 @@ function lockPageScroll() {
 	};
 }
 
+const inertLocks = new Map<HTMLElement, { count: number; previous: boolean }>();
+function lockInert(element: HTMLElement) {
+	const state = inertLocks.get(element) || { count: 0, previous: element.inert };
+	state.count++;
+	inertLocks.set(element, state);
+	element.inert = true;
+	return () => {
+		if (--state.count === 0) {
+			element.inert = state.previous;
+			inertLocks.delete(element);
+		}
+	};
+}
+
 function useModalFocus(onClose: () => void) {
 	const dialog = useRef<HTMLDivElement>(null);
 	const onCloseRef = useRef(onClose);
@@ -126,6 +140,15 @@ function useModalFocus(onClose: () => void) {
 		if (!node) return;
 		const unlockScroll = lockPageScroll();
 		const previousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+		const background: Array<() => void> = [];
+		for (let current: HTMLElement = node; current.parentElement; current = current.parentElement) {
+			for (const sibling of current.parentElement.children) {
+				if (sibling instanceof HTMLElement && sibling !== current) {
+					background.push(lockInert(sibling));
+				}
+			}
+			if (current.parentElement === document.body) break;
+		}
 		const focusable = () =>
 			Array.from(node.querySelectorAll<HTMLElement>(focusableSelector)).filter(
 				item => !item.hasAttribute("aria-hidden") && item.offsetParent !== null,
@@ -164,6 +187,7 @@ function useModalFocus(onClose: () => void) {
 		return () => {
 			window.removeEventListener("keydown", handleKeyDown, true);
 			unlockScroll();
+			for (const unlock of background) unlock();
 			window.requestAnimationFrame(() => {
 				if (previousFocus?.isConnected) previousFocus.focus();
 			});
@@ -525,6 +549,7 @@ function Album({
 }) {
 	const t = copy[language];
 	const [category, setCategory] = useState<Category>("all");
+	const [filterOpen, setFilterOpen] = useState(false);
 	const sharedPhotoId = new URLSearchParams(window.location.search).get("photo");
 	const sharedPhoto = manifest.photos.find(item => item.id === sharedPhotoId) || null;
 	const [viewer, setViewer] = useState<AlbumPhoto | null>(sharedPhoto);
@@ -582,6 +607,18 @@ function Album({
 			),
 		[manifest.photos, category, favourites],
 	);
+	const filterOptions = [
+		{ value: "all", label: t.all, count: manifest.photos.length },
+		{
+			value: "favourites",
+			label: t.favourites,
+			count: manifest.photos.filter(photo => favourites.has(photo.id)).length,
+		},
+		...Object.keys(categories)
+			.filter(key => categoryCounts[key])
+			.map(key => ({ value: key, label: photoLabel(key, language), count: categoryCounts[key] })),
+	];
+	const selectedFilter = filterOptions.find(option => option.value === category) || filterOptions[0];
 	const toggleFavourite = (id: string) =>
 		setFavourites(previous => {
 			const next = new Set(previous);
@@ -598,37 +635,32 @@ function Album({
 					</div>
 				)}
 				<div className={styles.toolbar}>
-					<nav
-						className={styles.categoryNav}
-						aria-label={language === "en" ? "Photo categories" : "Catégories de photos"}
+					<span className={styles.filterLabel} id="filter-label">
+						{t.filterPhotos}
+					</span>
+					<div className={styles.categoryNav} role="group" aria-labelledby="filter-label">
+						{filterOptions.map(option => (
+							<button
+								key={option.value}
+								aria-pressed={category === option.value}
+								className={category === option.value ? styles.activeTab : ""}
+								onClick={() => setCategory(option.value)}
+							>
+								{option.label} <span>{option.count}</span>
+							</button>
+						))}
+					</div>
+					<button
+						className={styles.mobileFilter}
+						aria-haspopup="dialog"
+						aria-expanded={filterOpen}
+						onClick={() => setFilterOpen(true)}
 					>
-						<button
-							aria-pressed={category === "all"}
-							className={category === "all" ? styles.activeTab : ""}
-							onClick={() => setCategory("all")}
-						>
-							{t.all} <span>{manifest.photos.length}</span>
-						</button>
-						<button
-							aria-pressed={category === "favourites"}
-							className={category === "favourites" ? styles.activeTab : ""}
-							onClick={() => setCategory("favourites")}
-						>
-							{t.favourites} <span>{favourites.size}</span>
-						</button>
-						{Object.keys(categories)
-							.filter(key => categoryCounts[key])
-							.map(key => (
-								<button
-									key={key}
-									aria-pressed={category === key}
-									className={category === key ? styles.activeTab : ""}
-									onClick={() => setCategory(key)}
-								>
-									{photoLabel(key, language)} <span>{categoryCounts[key]}</span>
-								</button>
-							))}
-					</nav>
+						<span>
+							{t.filter}: {selectedFilter.label} · {selectedFilter.count}
+						</span>
+						<span aria-hidden="true">⌄</span>
+					</button>
 				</div>
 				{notice && <NoticeBox notice={notice} />}
 				{filtered.length ? (
@@ -657,12 +689,17 @@ function Album({
 										/>
 										<span className={styles.viewLabel}>{t.view}</span>
 									</button>
-									<div className={styles.cardMeta}>
-										<div>
-											{(category === "all" || category === "favourites") && (
-												<strong>{photoLabel(photo.category, language)}</strong>
-											)}
-											{Boolean(photo.activity?.views || photo.activity?.downloadRequests) && (
+									<button
+										className={`${styles.favourite} ${favourites.has(photo.id) ? styles.favouriteOn : ""}`}
+										onClick={() => toggleFavourite(photo.id)}
+										aria-label={favourites.has(photo.id) ? t.removeFavourite : t.addFavourite}
+										aria-pressed={favourites.has(photo.id)}
+									>
+										{favourites.has(photo.id) ? "♥" : "♡"}
+									</button>
+									{Boolean(photo.activity?.views || photo.activity?.downloadRequests) && (
+										<div className={styles.cardMeta}>
+											<div>
 												<span>
 													{[
 														photo.activity?.views
@@ -675,17 +712,9 @@ function Album({
 														.filter(Boolean)
 														.join(" · ")}
 												</span>
-											)}
+											</div>
 										</div>
-										<button
-											className={`${styles.favourite} ${favourites.has(photo.id) ? styles.favouriteOn : ""}`}
-											onClick={() => toggleFavourite(photo.id)}
-											aria-label={favourites.has(photo.id) ? t.removeFavourite : t.addFavourite}
-											aria-pressed={favourites.has(photo.id)}
-										>
-											{favourites.has(photo.id) ? "♥" : "♡"}
-										</button>
-									</div>
+									)}
 								</article>
 							</li>
 						))}
@@ -697,6 +726,49 @@ function Album({
 					</div>
 				)}
 			</main>
+			{filterOpen && (
+				<div
+					className={styles.sheetBackdrop}
+					onClick={event => {
+						if (event.target === event.currentTarget) setFilterOpen(false);
+					}}
+				>
+					<ModalDialog
+						className={styles.filterSheet}
+						onClose={() => setFilterOpen(false)}
+						labelledBy="filter-title"
+					>
+						<div className={styles.sheetHeader}>
+							<h2 id="filter-title">{t.filterPhotos}</h2>
+							<button
+								className={styles.iconButton}
+								onClick={() => setFilterOpen(false)}
+								aria-label={t.closeFilters}
+							>
+								×
+							</button>
+						</div>
+						<div className={styles.filterOptions}>
+							{filterOptions.map(option => (
+								<button
+									key={option.value}
+									aria-pressed={category === option.value}
+									onClick={() => {
+										setCategory(option.value);
+										setFilterOpen(false);
+									}}
+								>
+									<span className={styles.filterCheck} aria-hidden="true">
+										{category === option.value ? "✓" : ""}
+									</span>
+									<span>{option.label}</span>
+									<span className={styles.filterCount}>{option.count}</span>
+								</button>
+							))}
+						</div>
+					</ModalDialog>
+				</div>
+			)}
 			{viewer && (
 				<Viewer
 					photo={viewer}
@@ -901,6 +973,14 @@ function Viewer({
 							{current.width} × {current.height} px ·{" "}
 							{formatBytes(current.downloads.full.bytes, language)}
 						</p>
+						<div className={styles.viewerActions}>
+							<button className={styles.button} onClick={() => onTerms(current)}>
+								↓ {t.download}
+							</button>
+							<button className={styles.textButton} onClick={() => onRemoval(current)}>
+								{t.removal}
+							</button>
+						</div>
 					</div>
 					<button
 						className={`${styles.favouriteLarge} ${favourites.has(current.id) ? styles.favouriteOn : ""}`}
@@ -909,14 +989,6 @@ function Viewer({
 						aria-pressed={favourites.has(current.id)}
 					>
 						{favourites.has(current.id) ? "♥" : "♡"}
-					</button>
-				</div>
-				<div className={styles.viewerActions}>
-					<button className={styles.button} onClick={() => onTerms(current)}>
-						↓ {t.download}
-					</button>
-					<button className={styles.textButton} onClick={() => onRemoval(current)}>
-						{t.removal}
 					</button>
 				</div>
 			</div>

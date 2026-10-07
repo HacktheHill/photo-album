@@ -272,7 +272,7 @@ button:disabled {
 .album {
 	width: min(100% - 2rem, 92rem);
 	margin: auto;
-	padding: clamp(1.5rem, 3vw, 3rem) 0 4rem;
+	padding: 1rem 0 4rem;
 }
 .toolbar {
 	position: sticky;
@@ -281,15 +281,15 @@ button:disabled {
 	padding: 0.75rem 0;
 	background: var(--color-album-surface);
 	display: grid;
-	gap: 1rem;
-	margin: 0 0 1rem;
+	gap: 0.5rem;
+	margin: 0 0 0.5rem;
 }
 .categoryNav {
 	flex-wrap: wrap;
 	display: flex;
 	gap: 0.5rem;
 	overflow-x: auto;
-	padding-bottom: 0.45rem;
+	padding-bottom: 0;
 	scrollbar-width: thin;
 }
 .categoryNav button {
@@ -324,6 +324,7 @@ button:disabled {
 	list-style: none;
 }
 .photoCard {
+	position: relative;
 	overflow: hidden;
 	border: 1px solid #e3ddd4;
 	border-radius: 0.6rem;
@@ -371,7 +372,7 @@ button:disabled {
 	align-items: center;
 	justify-content: space-between;
 	gap: 0.5rem;
-	padding: 0.7rem 0.8rem 0.85rem;
+	padding: 0.65rem 0.8rem;
 }
 .cardMeta div {
 	min-width: 0;
@@ -388,7 +389,6 @@ button:disabled {
 	font-size: 0.85rem;
 }
 .cardMeta span {
-	margin-top: 0.2rem;
 	color: #805044;
 	font-size: 0.75rem;
 }
@@ -510,7 +510,7 @@ button:disabled {
 	display: flex;
 	flex-wrap: wrap;
 	gap: 0.65rem;
-	margin-top: 1.25rem;
+	margin-top: 0.6rem;
 }
 .viewerActions .textButton {
 	width: 100%;
@@ -706,41 +706,118 @@ button:disabled {
 	line-height: 1.2;
 	text-align: center;
 }
-@media (max-width: 760px) {
-	.topbar {
-		grid-template-columns: minmax(0, 1fr) auto;
-		gap: 0.25rem 0.75rem;
-	}
-	.brand img {
-		width: min(240px, 32vw);
-	}
-	.topActions {
-		grid-column: 2;
-		grid-row: 1;
-	}
-	.albumTitle {
-		grid-column: 1 / -1;
-		grid-row: 2;
-		padding: 0.25rem 0 0.9rem;
-		font-size: 1.5rem;
-	}
+.filterLabel {
+	font-size: 0.85rem;
+	font-weight: 700;
 }
-
-.previewStatus {
+.mobileFilter {
+	display: none;
+}
+.favourite {
 	position: absolute;
+	top: 0.5rem;
+	right: 0.5rem;
+	border: 1px solid var(--color-control-border);
+	border-radius: 50%;
+	background: #fff;
+	box-shadow: 0 2px 6px rgb(0 0 0 / 12%);
+}
+.sheetBackdrop {
+	position: fixed;
 	inset: 0;
+	z-index: 20;
+	display: flex;
+	align-items: end;
+	justify-content: center;
+	background: rgb(26 17 18 / 60%);
+}
+.filterSheet {
+	width: min(100%, 32rem);
+	max-height: 85dvh;
 	display: flex;
 	flex-direction: column;
+	padding: 0.75rem 1rem max(1rem, env(safe-area-inset-bottom));
+	border-radius: 1rem 1rem 0 0;
+	background: #fffaf4;
+	animation: sheetIn 0.18s ease-out;
+}
+.sheetHeader {
+	display: flex;
 	align-items: center;
-	justify-content: center;
+	justify-content: space-between;
+	gap: 1rem;
+}
+.sheetHeader h2 {
+	margin: 0;
+	font-size: 1.2rem;
+}
+.filterOptions {
+	overflow-y: auto;
+	overscroll-behavior: contain;
+	min-height: 0;
+}
+.filterOptions button {
+	display: flex;
+	align-items: center;
 	gap: 0.75rem;
-	padding: 3rem;
-	text-align: center;
-	color: var(--color-cream);
+	width: 100%;
+	min-height: 48px;
+	padding: 0.65rem 0.5rem;
+	border: 0;
+	border-radius: 0.4rem;
+	color: var(--color-ink);
+	background: transparent;
+	text-align: left;
+}
+.filterOptions button[aria-pressed="true"] {
+	background: #f5e2cf;
+	font-weight: 700;
+}
+.filterOptions button:hover {
+	background: #f5e2cf;
+}
+.filterCheck {
+	width: 1rem;
+	flex: none;
+}
+.filterCount {
+	margin-left: auto;
+	color: var(--color-muted);
+}
+@keyframes sheetIn {
+	from {
+		transform: translateY(100%);
+	}
+	to {
+		transform: translateY(0);
+	}
 }
 @media (max-width: 760px) {
-	.categoryNav {
-		flex-wrap: nowrap;
-		mask-image: linear-gradient(to right, #000 calc(100% - 1rem), transparent);
+	.categoryNav,
+	.filterLabel {
+		display: none;
+	}
+	.mobileFilter {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 0.75rem;
+		width: 100%;
+		min-height: 48px;
+		padding: 0.65rem 0.9rem;
+		border: 1px solid var(--color-control-border);
+		border-radius: 0.5rem;
+		color: var(--color-ink);
+		background: #fff;
+		text-align: left;
+	}
+}
+@media (prefers-reduced-motion: reduce) {
+	.filterSheet,
+	.spinner {
+		animation: none;
+	}
+	.viewLabel {
+		transition: none;
 	}
 }
