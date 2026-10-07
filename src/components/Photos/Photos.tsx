@@ -706,34 +706,7 @@ function Album({
 											width={photo.thumbnail.width}
 											height={photo.thumbnail.height}
 										/>
-										<span className={styles.viewLabel}>{t.view}</span>
 									</button>
-									<button
-										className={`${styles.favourite} ${favourites.has(photo.id) ? styles.favouriteOn : ""}`}
-										onClick={() => toggleFavourite(photo.id)}
-										aria-label={favourites.has(photo.id) ? t.removeFavourite : t.addFavourite}
-										aria-pressed={favourites.has(photo.id)}
-									>
-										<HeartIcon filled={favourites.has(photo.id)} />
-									</button>
-									{Boolean(photo.activity?.views || photo.activity?.downloadRequests) && (
-										<div className={styles.cardMeta}>
-											<div>
-												<span>
-													{[
-														photo.activity?.views
-															? `${photo.activity.views} ${photo.activity.views === 1 ? t.oneView : t.views}`
-															: "",
-														photo.activity?.downloadRequests
-															? `${photo.activity.downloadRequests} ${photo.activity.downloadRequests === 1 ? t.oneDownload : t.downloadRequests}`
-															: "",
-													]
-														.filter(Boolean)
-														.join(" · ")}
-												</span>
-											</div>
-										</div>
-									)}
 								</article>
 							</li>
 						))}
@@ -987,27 +960,38 @@ function Viewer({
 					</button>
 				</div>
 				<div className={styles.viewerInfo}>
-					<div>
-						<p>
-							{current.width} × {current.height} px ·{" "}
-							{formatBytes(current.downloads.full.bytes, language)}
-						</p>
-						<div className={styles.viewerActions}>
-							<button className={styles.button} onClick={() => onTerms(current)}>
-								{t.download}
-							</button>
-							<button className={styles.textButton} onClick={() => onRemoval(current)}>
-								{t.removal}
-							</button>
-						</div>
+					<p>
+						{[
+							`${current.width} × ${current.height} px`,
+							formatBytes(current.downloads.full.bytes, language),
+							current.activity?.views
+								? `${current.activity.views} ${current.activity.views === 1 ? t.oneView : t.views}`
+								: "",
+							current.activity?.downloadRequests
+								? `${current.activity.downloadRequests} ${current.activity.downloadRequests === 1 ? t.oneDownload : t.downloadRequests}`
+								: "",
+						]
+							.filter(Boolean)
+							.join(" · ")}
+					</p>
+					<div className={styles.viewerActions}>
+						<button className={styles.button} onClick={() => onTerms(current)}>
+							{t.download}
+						</button>
+						<button
+							className={`${styles.favouriteLarge} ${favourites.has(current.id) ? styles.favouriteOn : ""}`}
+							onClick={() => onToggleFavourite(current.id)}
+							aria-label={favourites.has(current.id) ? t.removeFavourite : t.addFavourite}
+							aria-pressed={favourites.has(current.id)}
+						>
+							<HeartIcon filled={favourites.has(current.id)} />
+						</button>
 					</div>
 					<button
-						className={`${styles.favouriteLarge} ${favourites.has(current.id) ? styles.favouriteOn : ""}`}
-						onClick={() => onToggleFavourite(current.id)}
-						aria-label={favourites.has(current.id) ? t.removeFavourite : t.addFavourite}
-						aria-pressed={favourites.has(current.id)}
+						className={`${styles.textButton} ${styles.viewerRemoval}`}
+						onClick={() => onRemoval(current)}
 					>
-						<HeartIcon filled={favourites.has(current.id)} />
+						{t.removal}
 					</button>
 				</div>
 			</div>

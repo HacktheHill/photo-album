@@ -288,9 +288,7 @@ button:disabled {
 	flex-wrap: wrap;
 	display: flex;
 	gap: 0.5rem;
-	overflow-x: auto;
-	padding-bottom: 0;
-	scrollbar-width: thin;
+	overflow: visible;
 }
 .categoryNav button {
 	min-height: var(--control-height);
@@ -324,14 +322,10 @@ button:disabled {
 	list-style: none;
 }
 .photoCard {
-	position: relative;
-	overflow: hidden;
-	border: 1px solid #e3ddd4;
 	border-radius: 0.6rem;
-	background: #fff;
-	box-shadow: 0 0.3rem 1.1rem rgb(101 0 20 / 6%);
 }
 .photoButton {
+	border-radius: inherit;
 	position: relative;
 	display: block;
 	width: 100%;
@@ -350,49 +344,6 @@ button:disabled {
 .photoButton:hover {
 	background: #f5efe6;
 }
-.viewLabel {
-	position: absolute;
-	right: 0.7rem;
-	bottom: 0.7rem;
-	padding: 0.35rem 0.55rem;
-	border-radius: 0.35rem;
-	color: #fff;
-	background: rgb(26 17 18 / 82%);
-	font-size: 0.7rem;
-	font-weight: 800;
-	opacity: 0;
-	transition: opacity 0.2s;
-}
-.photoButton:hover .viewLabel,
-.photoButton:focus-visible .viewLabel {
-	opacity: 1;
-}
-.cardMeta {
-	display: flex;
-	align-items: center;
-	justify-content: space-between;
-	gap: 0.5rem;
-	padding: 0.65rem 0.8rem;
-}
-.cardMeta div {
-	min-width: 0;
-}
-.cardMeta strong,
-.cardMeta span {
-	display: block;
-	overflow: hidden;
-	text-overflow: ellipsis;
-	white-space: nowrap;
-}
-.cardMeta strong {
-	color: var(--color-ink);
-	font-size: 0.85rem;
-}
-.cardMeta span {
-	color: #805044;
-	font-size: 0.75rem;
-}
-.favourite,
 .favouriteLarge {
 	display: inline-flex;
 	align-items: center;
@@ -439,8 +390,7 @@ button:disabled {
 	background: var(--color-ink);
 	box-shadow: 0 2rem 5rem rgb(0 0 0 / 35%);
 }
-.viewerTop,
-.viewerInfo {
+.viewerTop {
 	display: flex;
 	align-items: start;
 	justify-content: space-between;
@@ -495,15 +445,15 @@ button:disabled {
 .viewerNext {
 	right: 1rem;
 }
-.viewerInfo h2 {
-	margin: 0;
-	overflow-wrap: anywhere;
-	font-size: clamp(1rem, 2vw, 1.4rem);
+.viewerInfo {
+	display: grid;
+	gap: 0.75rem;
 }
 .viewerInfo p {
-	margin: 0.4rem 0 0;
+	margin: 0;
 	color: #f8cc8d;
 	font-size: 0.8rem;
+	line-height: 1.5;
 }
 .favouriteLarge {
 	color: #f8cc8d;
@@ -511,12 +461,13 @@ button:disabled {
 }
 .viewerActions {
 	display: flex;
-	flex-wrap: wrap;
+	align-items: center;
+	justify-content: space-between;
 	gap: 0.65rem;
-	margin-top: 0.6rem;
 }
-.viewerActions .textButton {
-	width: 100%;
+.viewerRemoval {
+	justify-self: start;
+	min-height: var(--control-height);
 	text-align: left;
 }
 .dialog {
@@ -602,9 +553,6 @@ button:disabled {
 		grid-template-columns: repeat(2, minmax(0, 1fr));
 		gap: 0.6rem;
 	}
-	.cardMeta {
-		padding: 0.55rem;
-	}
 	.caseCard {
 		grid-template-columns: 1fr;
 	}
@@ -687,9 +635,6 @@ button:disabled {
 	color: var(--color-muted);
 	opacity: 1;
 }
-.cardMeta span:last-child {
-	white-space: normal;
-}
 
 .viewerCategory {
 	margin: 0;
@@ -748,15 +693,6 @@ button:disabled {
 .mobileFilter {
 	display: none;
 }
-.favourite {
-	position: absolute;
-	top: 0.5rem;
-	right: 0.5rem;
-	border: 1px solid var(--color-control-border);
-	border-radius: 50%;
-	background: #fff;
-	box-shadow: 0 2px 6px rgb(0 0 0 / 12%);
-}
 .sheetBackdrop {
 	position: fixed;
 	inset: 0;
@@ -787,6 +723,8 @@ button:disabled {
 	font-size: 1.2rem;
 }
 .filterOptions {
+	padding: 6px;
+	margin: 0 -6px;
 	overflow-y: auto;
 	overscroll-behavior: contain;
 	min-height: 0;
@@ -851,8 +789,5 @@ button:disabled {
 	.filterSheet,
 	.spinner {
 		animation: none;
-	}
-	.viewLabel {
-		transition: none;
 	}
 }

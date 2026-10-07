@@ -453,10 +453,12 @@ test("favourites persist after sign out and empty and category cards avoid redun
 	await page.route("**/?action=logout", route => route.fulfill({ json: {} }));
 	await page.goto("/");
 	await page.getByRole("button", { name: "My favourites 0", exact: true }).click();
-	await expect(page.getByText("Tap the heart on a photo to save it here.")).toBeVisible();
+	await expect(page.getByText("Open a photo and tap the heart to save it here.")).toBeVisible();
 	await page.getByRole("button", { name: "All photos 2", exact: true }).click();
 	await expect(page.getByText("0 views · 0 downloads", { exact: true })).toHaveCount(0);
-	await page.getByRole("button", { name: "Add to favourites", exact: true }).first().click();
+	await page.getByRole("button", { name: "View photo: Opening ceremony 1", exact: true }).click();
+	await page.getByRole("dialog").getByRole("button", { name: "Add to favourites", exact: true }).click();
+	await page.getByRole("button", { name: "Close viewer", exact: true }).click();
 	await page.getByRole("button", { name: "Opening ceremony 1", exact: true }).click();
 	await expect(page.locator('[class*="cardMeta"] strong')).toHaveCount(0);
 	await page.getByRole("button", { name: "Sign out", exact: true }).click();
@@ -533,7 +535,7 @@ test("mobile filters show all choices, apply immediately and restore focus", asy
 	await expect(page.getByRole("dialog", { name: "Filtrer les photos" })).toBeVisible();
 });
 
-test("photo cards show only nonzero activity and favourite buttons remain independent", async ({ page }) => {
+test("photo-only cards move activity and favourites into the viewer", async ({ page }) => {
 	await routeAttendee(page);
 	await page.route("**/?action=album", route =>
 		route.fulfill({
@@ -552,13 +554,65 @@ test("photo cards show only nonzero activity and favourite buttons remain indepe
 		}),
 	);
 	await page.goto("/");
-	await expect(page.locator("article").first()).toContainText("10 views · 2 downloads");
-	await expect(page.locator("article strong")).toHaveCount(0);
-	await expect(page.locator('[class*="cardMeta"]')).toHaveCount(1);
-	await page.getByRole("button", { name: "Add to favourites", exact: true }).first().click();
-	await expect(page.getByRole("dialog")).toHaveCount(0);
-	await expect(page.getByRole("button", { name: "Remove from favourites", exact: true })).toHaveAttribute(
+	await expect(page.locator("article").first()).not.toContainText("10 views");
+	await expect(page.locator("article button")).toHaveCount(2);
+	await expect(page.getByRole("button", { name: "Add to favourites", exact: true })).toHaveCount(0);
+	await page.getByRole("button", { name: "View photo: Opening ceremony 1", exact: true }).click();
+	const viewer = page.getByRole("dialog");
+	await expect(viewer).toContainText("2400 × 1600 px · 2.4 MB · 10 views · 2 downloads");
+	await viewer.getByRole("button", { name: "Add to favourites", exact: true }).click();
+	await expect(viewer.getByRole("button", { name: "Remove from favourites", exact: true })).toHaveAttribute(
 		"aria-pressed",
 		"true",
 	);
+	await page.setViewportSize({ width: 390, height: 844 });
+	const download = await viewer.getByRole("button", { name: "Download", exact: true }).boundingBox();
+	const heart = await viewer.getByRole("button", { name: "Remove from favourites", exact: true }).boundingBox();
+	expect(Math.abs(download!.y + download!.height / 2 - (heart!.y + heart!.height / 2))).toBeLessThan(1);
+	expect(download!.x + download!.width).toBeLessThan(heart!.x);
+	await viewer.getByRole("button", { name: "Next photo", exact: true }).click();
+	await expect(viewer).not.toContainText("0 views");
+	await expect(viewer).not.toContainText("0 downloads");
+});
+
+test("keyboard focus rings remain visible around desktop filters and photos", async ({ page }) => {
+	await routeAttendee(page);
+	await page.goto("/");
+	const all = page.getByRole("button", { name: "All photos 2", exact: true });
+	await expect(all).toBeVisible();
+	for (let i = 0; i < 4; i++) await page.keyboard.press("Tab");
+	await expect(all).toBeFocused();
+	const outlineIsVisible = () =>
+		page.evaluate(() => {
+			const focused = document.activeElement as HTMLElement;
+			const style = getComputedStyle(focused);
+			const expansion = parseFloat(style.outlineWidth) + parseFloat(style.outlineOffset);
+			if (style.outlineStyle === "none" || expansion <= 0) return false;
+			const rect = focused.getBoundingClientRect();
+			for (let parent = focused.parentElement; parent; parent = parent.parentElement) {
+				const css = getComputedStyle(parent);
+				const bounds = parent.getBoundingClientRect();
+				if (
+					["hidden", "auto", "scroll", "clip"].includes(css.overflowX) &&
+					(rect.left - expansion < bounds.left || rect.right + expansion > bounds.right)
+				)
+					return false;
+				if (
+					["hidden", "auto", "scroll", "clip"].includes(css.overflowY) &&
+					(rect.top - expansion < bounds.top || rect.bottom + expansion > bounds.bottom)
+				)
+					return false;
+			}
+			return true;
+		});
+	expect(await outlineIsVisible()).toBe(true);
+	await all.press("Enter");
+	await all.press("Tab");
+	await expect(page.getByRole("button", { name: "My favourites 0", exact: true })).toBeFocused();
+	expect(await outlineIsVisible()).toBe(true);
+	await page.keyboard.press("Tab");
+	await page.keyboard.press("Tab");
+	await page.keyboard.press("Tab");
+	await expect(page.getByRole("button", { name: "View photo: Opening ceremony 1", exact: true })).toBeFocused();
+	expect(await outlineIsVisible()).toBe(true);
 });
