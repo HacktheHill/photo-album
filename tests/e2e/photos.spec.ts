@@ -411,7 +411,7 @@ test("viewer history restores the album position and nested dialogs keep scrolli
 	await target.click();
 	await expect(page.getByRole("dialog", { name: "Opening ceremony" })).toBeVisible();
 	await expect.poll(() => page.evaluate(() => document.body.style.position)).toBe("fixed");
-	await page.getByRole("button", { name: "↓ Download", exact: true }).click();
+	await page.getByRole("button", { name: "Download", exact: true }).click();
 	await page.getByRole("button", { name: "Cancel", exact: true }).filter({ hasText: "Cancel" }).click();
 	await expect.poll(() => page.evaluate(() => document.body.style.position)).toBe("fixed");
 	await page.getByRole("button", { name: "Next photo", exact: true }).click();
@@ -477,7 +477,7 @@ test("a refused download shows a message instead of navigating to the error", as
 	});
 	await page.goto("/");
 	await page.getByRole("button", { name: /View photo: Opening ceremony 1/ }).click();
-	await page.getByRole("button", { name: "↓ Download", exact: true }).click();
+	await page.getByRole("button", { name: "Download", exact: true }).click();
 	await page.getByRole("button", { name: /Continue to download · Full quality JPEG/ }).click();
 	await expect(page.getByRole("alert")).toContainText("This photo is no longer available.");
 	expect(ranges).toEqual(["bytes=0-0"]);

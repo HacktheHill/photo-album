@@ -975,7 +975,7 @@ function Viewer({
 						</p>
 						<div className={styles.viewerActions}>
 							<button className={styles.button} onClick={() => onTerms(current)}>
-								↓ {t.download}
+								{t.download}
 							</button>
 							<button className={styles.textButton} onClick={() => onRemoval(current)}>
 								{t.removal}
