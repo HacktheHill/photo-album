@@ -500,6 +500,15 @@ test("mobile filters show all choices, apply immediately and restore focus", asy
 	await page.setViewportSize({ width: 390, height: 844 });
 	await routeAttendee(page);
 	await page.goto("/");
+	await expect(page.getByRole("button", { name: "Filter: All photos · 2" })).toBeVisible();
+	const brand = await page.locator("header a").boundingBox();
+	const title = await page.locator("header h1").boundingBox();
+	const actions = await page.locator('[class*="topActions"]').boundingBox();
+	expect(brand).not.toBeNull();
+	expect(title).not.toBeNull();
+	expect(actions).not.toBeNull();
+	expect(title!.y).toBeGreaterThanOrEqual(brand!.y + brand!.height);
+	expect(title!.y).toBeGreaterThanOrEqual(actions!.y + actions!.height);
 	const trigger = page.getByRole("button", { name: "Filter: All photos · 2" });
 	await trigger.click();
 	const sheet = page.getByRole("dialog", { name: "Filter photos" });
